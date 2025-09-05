@@ -61,7 +61,8 @@ export default function RegisterForm({ open, onClose, onSwitchToLogin }: Registe
       return;
     }
 
-    const { confirmPassword: _, ...registerData } = formData;
+    const { confirmPassword, ...registerData } = formData;
+    // confirmPassword é usado apenas para validação, não é enviado para a API
     const success = await register(registerData);
     
     if (success) {

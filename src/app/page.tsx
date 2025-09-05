@@ -13,7 +13,6 @@ import {
 import { AuthProvider, useAuth } from '../hooks/useAuth';
 import LoginForm from '../components/LoginForm';
 import RegisterForm from '../components/RegisterForm';
-import ApiStatusTest from '../components/ApiStatusTest';
 
 function HomeContent() {
   const { user, isAuthenticated, logout } = useAuth();
@@ -21,7 +20,6 @@ function HomeContent() {
   const [isHovered, setIsHovered] = useState(false);
   const [showLoginForm, setShowLoginForm] = useState(false);
   const [showRegisterForm, setShowRegisterForm] = useState(false);
-  const [showApiTest, setShowApiTest] = useState(false);
 
   const handleLoginClick = () => {
     setShowLoginForm(true);
@@ -69,15 +67,6 @@ function HomeContent() {
               </a>
             </div>
             <div className="flex items-center space-x-4">
-              {/* Botão de teste da API (sempre visível) */}
-              <button 
-                onClick={() => setShowApiTest(true)}
-                className="text-gray-500 hover:text-gray-700 transition-colors px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50"
-                title="Testar Status da API"
-              >
-                🔧 API Status
-              </button>
-              
               {isAuthenticated ? (
                 <>
                   <span className="text-gray-700 font-medium">
@@ -370,11 +359,6 @@ function HomeContent() {
         onSwitchToLogin={handleSwitchToLogin}
       />
       
-      {/* Componente de teste da API */}
-      <ApiStatusTest 
-        open={showApiTest} 
-        onClose={() => setShowApiTest(false)} 
-      />
     </div>
   );
 }
