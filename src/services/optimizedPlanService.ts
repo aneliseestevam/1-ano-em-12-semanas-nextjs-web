@@ -187,18 +187,18 @@ class OptimizedPlanService {
         
         // Verificar se é o endpoint otimizado ou fallback
         if (response.data.data && Array.isArray(response.data.data)) {
-          // Endpoint otimizado retorna array de semanas
+          // Endpoint otimizado retorna array de semanas diretamente
           weeks = response.data.data;
         } else if (response.data.data && response.data.data.weeks) {
-          // Fallback retorna plano com semanas
+          // Endpoint retorna { plan: {...}, weeks: [...] }
           weeks = response.data.data.weeks || [];
         } else {
           weeks = [];
         }
         
-        OptimizedPlanService.setCache(cacheKey, weeks);
+        OptimizedPlanService.setCache(cacheKey, { weeks });
         console.log(`✅ getPlanWeeks: Semanas carregadas:`, weeks.length);
-        return { success: true, data: weeks };
+        return { success: true, data: { weeks } };
       }
       
       return { success: false, error: 'Erro ao carregar semanas' };

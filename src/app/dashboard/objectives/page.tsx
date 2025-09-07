@@ -596,9 +596,9 @@ export default function ObjectivesPage() {
       const optimizedPlanService = (await import('../../../services/optimizedPlanService')).default;
       const weeksResponse = await optimizedPlanService.getPlanWeeks(plan.id);
       
-      if (weeksResponse.success && weeksResponse.data && Array.isArray(weeksResponse.data) && weeksResponse.data.length > 0) {
+      if (weeksResponse.success && weeksResponse.data && weeksResponse.data.weeks && Array.isArray(weeksResponse.data.weeks) && weeksResponse.data.weeks.length > 0) {
         // Se existem semanas, usar a primeira disponível
-        const firstWeek = weeksResponse.data[0];
+        const firstWeek = weeksResponse.data.weeks[0];
         console.log('✅ Usando primeira semana disponível:', firstWeek);
         
         setSelectedPlanForGoal({
@@ -634,9 +634,9 @@ export default function ObjectivesPage() {
         
         console.log('🔍 Resposta das semanas:', weeksResponse);
         
-        if (weeksResponse.success && weeksResponse.data && Array.isArray(weeksResponse.data)) {
+        if (weeksResponse.success && weeksResponse.data && weeksResponse.data.weeks && Array.isArray(weeksResponse.data.weeks)) {
           // Procurar pela semana correspondente
-          const week = weeksResponse.data.find((w: any) => w.weekNumber === firstWeek);
+          const week = weeksResponse.data.weeks.find((w: any) => w.weekNumber === firstWeek);
           console.log('🔍 Semana encontrada:', week);
           
           if (week && week._id) {
