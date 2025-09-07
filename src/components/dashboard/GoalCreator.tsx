@@ -35,7 +35,7 @@ const GoalCreator: React.FC<GoalCreatorProps> = ({
 }) => {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [category, setCategory] = useState('personal');
+  const [category, setCategory] = useState('saude');
   const [priority, setPriority] = useState<'low' | 'medium' | 'high'>('medium');
   const [targetDate, setTargetDate] = useState('');
 
@@ -60,7 +60,7 @@ const GoalCreator: React.FC<GoalCreatorProps> = ({
     // Reset form
     setTitle('');
     setDescription('');
-    setCategory('personal');
+    setCategory('saude');
     setPriority('medium');
     setTargetDate('');
     onClose();
@@ -70,7 +70,7 @@ const GoalCreator: React.FC<GoalCreatorProps> = ({
     // Reset form
     setTitle('');
     setDescription('');
-    setCategory('personal');
+    setCategory('saude');
     setPriority('medium');
     setTargetDate('');
     onClose();
@@ -143,14 +143,12 @@ const GoalCreator: React.FC<GoalCreatorProps> = ({
               onChange={(e) => setCategory(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors text-gray-900"
             >
-              <option value="personal">Pessoal</option>
-              <option value="professional">Profissional</option>
-              <option value="health">Saúde</option>
-              <option value="financial">Financeiro</option>
-              <option value="education">Educação</option>
-              <option value="relationships">Relacionamentos</option>
+              <option value="saude">Saúde</option>
+              <option value="carreira">Carreira</option>
+              <option value="financas">Finanças</option>
+              <option value="relacionamentos">Relacionamentos</option>
               <option value="hobbies">Hobbies</option>
-              <option value="other">Outros</option>
+              <option value="outros">Outros</option>
             </select>
           </div>
 
