@@ -112,7 +112,7 @@ const GoalCreator: React.FC<GoalCreatorProps> = ({
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="Ex: Aprender React avançado"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors text-gray-900 placeholder-gray-500"
               required
             />
           </div>
@@ -128,7 +128,7 @@ const GoalCreator: React.FC<GoalCreatorProps> = ({
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Descreva os detalhes do seu objetivo..."
               rows={3}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors resize-none"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors resize-none text-gray-900 placeholder-gray-500"
             />
           </div>
 
@@ -141,7 +141,7 @@ const GoalCreator: React.FC<GoalCreatorProps> = ({
               id="category"
               value={category}
               onChange={(e) => setCategory(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors text-gray-900"
             >
               <option value="personal">Pessoal</option>
               <option value="professional">Profissional</option>
@@ -163,7 +163,7 @@ const GoalCreator: React.FC<GoalCreatorProps> = ({
               id="priority"
               value={priority}
               onChange={(e) => setPriority(e.target.value as 'low' | 'medium' | 'high')}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors text-gray-900"
             >
               <option value="low">Baixa</option>
               <option value="medium">Média</option>
@@ -182,7 +182,7 @@ const GoalCreator: React.FC<GoalCreatorProps> = ({
                 type="date"
                 value={targetDate}
                 onChange={(e) => setTargetDate(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors text-gray-900"
               />
               <Calendar className="absolute right-3 top-2.5 w-4 h-4 text-gray-400" />
             </div>

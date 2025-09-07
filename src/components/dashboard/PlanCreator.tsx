@@ -74,7 +74,7 @@ const PlanCreator: React.FC<PlanCreatorProps> = ({ open, onClose, onCreatePlan }
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="Ex: Transformação Pessoal 2024"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors text-gray-900 placeholder-gray-500"
               required
             />
           </div>
@@ -90,7 +90,7 @@ const PlanCreator: React.FC<PlanCreatorProps> = ({ open, onClose, onCreatePlan }
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Descreva seus principais objetivos e motivações..."
               rows={4}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors resize-none"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors resize-none text-gray-900 placeholder-gray-500"
             />
           </div>
 
@@ -105,7 +105,7 @@ const PlanCreator: React.FC<PlanCreatorProps> = ({ open, onClose, onCreatePlan }
                 type="date"
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors text-gray-900"
                 required
               />
               <Calendar className="absolute right-3 top-2.5 w-4 h-4 text-gray-400" />
@@ -121,7 +121,7 @@ const PlanCreator: React.FC<PlanCreatorProps> = ({ open, onClose, onCreatePlan }
               id="year"
               value={year}
               onChange={(e) => setYear(Number(e.target.value))}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors text-gray-900"
             >
               {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() + i).map((y) => (
                 <option key={y} value={y}>
