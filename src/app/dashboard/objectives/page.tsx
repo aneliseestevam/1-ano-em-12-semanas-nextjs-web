@@ -559,7 +559,20 @@ export default function ObjectivesPage() {
     weekNumber: number;
   }) => {
     try {
-      console.log('🔄 Criando novo objetivo:', goalData);
+      console.log('🔄 handleCreateGoal: Dados recebidos:', goalData);
+      console.log('🔄 handleCreateGoal: Parâmetros para API:', {
+        planId: goalData.planId,
+        weekId: goalData.weekId,
+        goalData: {
+          title: goalData.title,
+          description: goalData.description,
+          category: goalData.category,
+          priority: goalData.priority,
+          targetDate: goalData.targetDate,
+          status: goalData.status,
+          completed: goalData.completed
+        }
+      });
       
       const { goalService } = await import('../../../services/goalService');
       
@@ -604,10 +617,13 @@ export default function ObjectivesPage() {
         setShowGoalCreator(false);
         setSelectedPlanForGoal(null);
       } else {
-        console.error('❌ Erro ao criar objetivo:', result.error);
+        console.error('❌ handleCreateGoal: Erro ao criar objetivo:', result.error);
+        console.error('❌ handleCreateGoal: Resultado completo:', result);
       }
     } catch (error) {
-      console.error('❌ Erro ao criar objetivo:', error);
+      console.error('❌ handleCreateGoal: Erro na requisição:', error);
+      console.error('❌ handleCreateGoal: Tipo do erro:', typeof error);
+      console.error('❌ handleCreateGoal: Stack trace:', error instanceof Error ? error.stack : 'N/A');
     }
   };
 

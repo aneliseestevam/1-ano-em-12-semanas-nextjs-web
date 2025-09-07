@@ -34,13 +34,33 @@ const goalService = {
   // Criar novo objetivo
   async createGoal(planId: string, weekId: string, goalData: Record<string, unknown>) {
     try {
+      console.log('🔄 goalService.createGoal: Enviando requisição:', {
+        planId,
+        weekId,
+        goalData,
+        url: `/goals/plans/${planId}/weeks/${weekId}`
+      });
+      
       const response = await api.post(`/goals/plans/${planId}/weeks/${weekId}`, goalData);
+      
+      console.log('📊 goalService.createGoal: Resposta da API:', response.data);
+      console.log('📊 goalService.createGoal: Estrutura da resposta:', {
+        success: response.data.success,
+        hasData: !!response.data.data,
+        hasGoal: !!response.data.data?.goal,
+        fullResponse: response.data
+      });
+      
       // A API retorna { success: true, data: { goal: {...} } }
       if (response.data.success) {
-        return { success: true, data: response.data.data.goal };
+        const goalData = response.data.data.goal;
+        console.log('✅ goalService.createGoal: Goal criado:', goalData);
+        return { success: true, data: goalData };
       }
+      console.log('❌ goalService.createGoal: API retornou success: false');
       return { success: false, message: response.data.message };
     } catch (error: unknown) {
+      console.error('❌ goalService.createGoal: Erro:', error);
       return { success: false, error: this.handleError(error) };
     }
   },
