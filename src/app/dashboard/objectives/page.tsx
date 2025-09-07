@@ -8,6 +8,7 @@ import { Goal } from '../../../types/dashboard';
 import { usePlansManager } from '../../../hooks/usePlansManager';
 import { PageHeader, ProgressCard, StatCard, FilterBar, ButtonGroup, LoadingSpinner, EmptyState } from '../../../components/ui';
 import GoalCreator from '../../../components/dashboard/GoalCreator';
+import GoalEditor from '../../../components/dashboard/GoalEditor';
 
 interface GoalWithPlanInfo extends Goal {
   planId: string;
@@ -38,6 +39,8 @@ export default function ObjectivesPage() {
   const [apiOffline] = useState(false);
   const [showGoalCreator, setShowGoalCreator] = useState(false);
   const [selectedPlanForGoal, setSelectedPlanForGoal] = useState<{ planId: string; weekId: string; weekNumber: number; planTitle: string } | null>(null);
+  const [showGoalEditor, setShowGoalEditor] = useState(false);
+  const [selectedGoalForEdit, setSelectedGoalForEdit] = useState<GoalWithPlanInfo | null>(null);
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
@@ -588,6 +591,74 @@ export default function ObjectivesPage() {
     }
   };
 
+  const handleUpdateGoal = async (goalId: string, goalData: {
+    title: string;
+    description: string;
+    category: string;
+    priority: 'low' | 'medium' | 'high';
+    targetDate: string;
+  }) => {
+    try {
+      console.log('🔄 Atualizando objetivo:', goalId, goalData);
+      
+      const { goalService } = await import('../../../services/goalService');
+      
+      const result = await goalService.updateGoal(
+        selectedGoalForEdit!.planId,
+        selectedGoalForEdit!.weekId,
+        goalId,
+        goalData
+      );
+
+      if (result.success) {
+        console.log('✅ Objetivo atualizado com sucesso:', result.data);
+        
+        // Recarregar objetivos para refletir as mudanças
+        await loadAllGoalsFromAPI();
+        
+        setShowGoalEditor(false);
+        setSelectedGoalForEdit(null);
+      } else {
+        console.error('❌ Erro ao atualizar objetivo:', result.error);
+      }
+    } catch (error) {
+      console.error('❌ Erro ao atualizar objetivo:', error);
+    }
+  };
+
+  const handleDeleteGoal = async (goalId: string) => {
+    try {
+      console.log('🔄 Excluindo objetivo:', goalId);
+      
+      const { goalService } = await import('../../../services/goalService');
+      
+      const result = await goalService.deleteGoal(
+        selectedGoalForEdit!.planId,
+        selectedGoalForEdit!.weekId,
+        goalId
+      );
+
+      if (result.success) {
+        console.log('✅ Objetivo excluído com sucesso');
+        
+        // Recarregar objetivos para refletir as mudanças
+        await loadAllGoalsFromAPI();
+        
+        setShowGoalEditor(false);
+        setSelectedGoalForEdit(null);
+      } else {
+        console.error('❌ Erro ao excluir objetivo:', result.error);
+      }
+    } catch (error) {
+      console.error('❌ Erro ao excluir objetivo:', error);
+    }
+  };
+
+  const handleOpenGoalEditor = (goal: GoalWithPlanInfo) => {
+    setSelectedGoalForEdit(goal);
+    setShowGoalEditor(true);
+  };
+
   const handleCreateWeekAndGoal = async (plan: any, weekNumber: number) => {
     try {
       console.log('🔄 Tentando criar semana para o plano:', plan.id, 'semana:', weekNumber);
@@ -1049,30 +1120,47 @@ export default function ObjectivesPage() {
                             </button>
 
                             <div className="flex-1 min-w-0">
-                              <h4 className={`font-semibold text-sm mb-1 ${
-                                goal.completed ? 'text-green-800 line-through' : 'text-gray-900'
-                              }`}>
-                                {goal.title}
-                              </h4>
-                              
-                              {goal.description && (
-                                <p className={`text-xs mb-2 ${
-                                  goal.completed ? 'text-green-600' : 'text-gray-600'
-                                }`}>
-                                  {goal.description}
-                                </p>
-                              )}
+                              <div className="flex items-start justify-between">
+                                <div className="flex-1 min-w-0">
+                                  <h4 className={`font-semibold text-sm mb-1 ${
+                                    goal.completed ? 'text-green-800 line-through' : 'text-gray-900'
+                                  }`}>
+                                    {goal.title}
+                                  </h4>
+                                  
+                                  {goal.description && (
+                                    <p className={`text-xs mb-2 ${
+                                      goal.completed ? 'text-green-600' : 'text-gray-600'
+                                    }`}>
+                                      {goal.description}
+                                    </p>
+                                  )}
 
-                    <div className="flex items-center justify-between">
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${getCategoryColor(goal.category)}`}>
-                        {getCategoryLabel(goal.category)}
-                      </span>
-                                
-                                {goal.tasks && goal.tasks.length > 0 && (
-                      <span className="text-xs text-gray-500">
-                                    {goal.tasks.filter(t => t.completed).length}/{goal.tasks.length} tarefas
-                      </span>
-                                )}
+                                  <div className="flex items-center justify-between">
+                                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${getCategoryColor(goal.category)}`}>
+                                      {getCategoryLabel(goal.category)}
+                                    </span>
+                                    
+                                    {goal.tasks && goal.tasks.length > 0 && (
+                                      <span className="text-xs text-gray-500">
+                                        {goal.tasks.filter(t => t.completed).length}/{goal.tasks.length} tarefas
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+
+                                {/* Action Buttons */}
+                                <div className="flex items-center space-x-1 ml-2">
+                                  <button
+                                    onClick={() => handleOpenGoalEditor(goal)}
+                                    className="p-1 text-gray-400 hover:text-blue-600 transition-colors"
+                                    title="Editar objetivo"
+                                  >
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                    </svg>
+                                  </button>
+                                </div>
                               </div>
                             </div>
                           </div>
@@ -1173,6 +1261,30 @@ export default function ObjectivesPage() {
             weekId={selectedPlanForGoal.weekId}
             weekNumber={selectedPlanForGoal.weekNumber}
             planTitle={selectedPlanForGoal.planTitle}
+          />
+        )}
+
+        {/* Goal Editor Modal */}
+        {selectedGoalForEdit && (
+          <GoalEditor
+            open={showGoalEditor}
+            onClose={() => {
+              setShowGoalEditor(false);
+              setSelectedGoalForEdit(null);
+            }}
+            onUpdateGoal={handleUpdateGoal}
+            onDeleteGoal={handleDeleteGoal}
+            goal={{
+              id: selectedGoalForEdit.id,
+              title: selectedGoalForEdit.title,
+              description: selectedGoalForEdit.description || '',
+              category: selectedGoalForEdit.category,
+              priority: selectedGoalForEdit.priority,
+              targetDate: selectedGoalForEdit.targetDate?.toISOString() || '',
+              completed: selectedGoalForEdit.completed
+            }}
+            planTitle={selectedGoalForEdit.planTitle}
+            weekNumber={selectedGoalForEdit.weekNumber}
           />
         )}
     </div>
