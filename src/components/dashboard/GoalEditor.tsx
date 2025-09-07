@@ -55,7 +55,7 @@ const GoalEditor: React.FC<GoalEditorProps> = ({
   }, [open, goal]);
 
   const handleUpdate = () => {
-    if (!title.trim()) return;
+    if (!title.trim() || !description.trim()) return;
 
     const goalData = {
       title: title.trim(),
@@ -124,7 +124,7 @@ const GoalEditor: React.FC<GoalEditorProps> = ({
           {/* Description */}
           <div>
             <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-2">
-              Descrição
+              Descrição *
             </label>
             <textarea
               id="description"
@@ -223,7 +223,7 @@ const GoalEditor: React.FC<GoalEditorProps> = ({
             </button>
             <button
               onClick={handleUpdate}
-              disabled={!title.trim()}
+              disabled={!title.trim() || !description.trim()}
               className="px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg font-semibold hover:from-indigo-700 hover:to-purple-700 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
             >
               <Save className="w-4 h-4" />

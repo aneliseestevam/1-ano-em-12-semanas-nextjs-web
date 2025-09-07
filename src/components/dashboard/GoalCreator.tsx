@@ -40,7 +40,7 @@ const GoalCreator: React.FC<GoalCreatorProps> = ({
   const [targetDate, setTargetDate] = useState('');
 
   const handleCreate = () => {
-    if (!title.trim()) return;
+    if (!title.trim() || !description.trim()) return;
 
     const goalData = {
       title: title.trim(),
@@ -120,7 +120,7 @@ const GoalCreator: React.FC<GoalCreatorProps> = ({
           {/* Description */}
           <div>
             <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-2">
-              Descrição
+              Descrição *
             </label>
             <textarea
               id="description"
@@ -208,7 +208,7 @@ const GoalCreator: React.FC<GoalCreatorProps> = ({
           </button>
           <button
             onClick={handleCreate}
-            disabled={!title.trim()}
+            disabled={!title.trim() || !description.trim()}
             className="px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg font-semibold hover:from-indigo-700 hover:to-purple-700 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Criar Objetivo
