@@ -588,6 +588,37 @@ export default function ObjectivesPage() {
     }
   };
 
+  const handleCreateWeekAndGoal = async (plan: any, weekNumber: number) => {
+    try {
+      console.log('🔄 Tentando criar semana para o plano:', plan.id, 'semana:', weekNumber);
+      
+      // Primeiro, vamos tentar obter todas as semanas do plano para ver se existe alguma
+      const { goalService } = await import('../../../services/goalService');
+      const weeksResponse = await goalService.getWeeks(plan.id);
+      
+      if (weeksResponse.success && weeksResponse.data && Array.isArray(weeksResponse.data) && weeksResponse.data.length > 0) {
+        // Se existem semanas, usar a primeira disponível
+        const firstWeek = weeksResponse.data[0];
+        console.log('✅ Usando primeira semana disponível:', firstWeek);
+        
+        setSelectedPlanForGoal({
+          planId: plan.id,
+          weekId: firstWeek._id,
+          weekNumber: firstWeek.weekNumber,
+          planTitle: plan.title
+        });
+        setShowGoalCreator(true);
+      } else {
+        // Se não existem semanas, mostrar mensagem para o usuário
+        alert(`O plano "${plan.title}" não possui semanas configuradas. Por favor, configure as semanas do plano primeiro antes de criar objetivos.`);
+      }
+      
+    } catch (error) {
+      console.error('❌ Erro ao obter semanas do plano:', error);
+      alert('Erro ao verificar semanas do plano. Verifique se o plano está configurado corretamente.');
+    }
+  };
+
   const handleOpenGoalCreator = async () => {
     // Se há planos disponíveis, usar o primeiro plano ativo
     const activePlans = plans?.filter(plan => plan.status === 'active') || [];
@@ -601,33 +632,34 @@ export default function ObjectivesPage() {
         const { goalService } = await import('../../../services/goalService');
         const weeksResponse = await goalService.getWeeks(firstPlan.id);
         
-        let weekId = `week_${firstWeek}`; // Fallback
+        console.log('🔍 Resposta das semanas:', weeksResponse);
         
-        if (weeksResponse.success && weeksResponse.data) {
+        if (weeksResponse.success && weeksResponse.data && Array.isArray(weeksResponse.data)) {
           // Procurar pela semana correspondente
           const week = weeksResponse.data.find((w: any) => w.weekNumber === firstWeek);
+          console.log('🔍 Semana encontrada:', week);
+          
           if (week && week._id) {
-            weekId = week._id;
+            console.log('✅ Usando weekId real:', week._id);
+            setSelectedPlanForGoal({
+              planId: firstPlan.id,
+              weekId: week._id,
+              weekNumber: firstWeek,
+              planTitle: firstPlan.title
+            });
+            setShowGoalCreator(true);
+            return;
           }
         }
         
-        setSelectedPlanForGoal({
-          planId: firstPlan.id,
-          weekId: weekId,
-          weekNumber: firstWeek,
-          planTitle: firstPlan.title
-        });
-        setShowGoalCreator(true);
+        // Se não encontrou a semana, tentar criar uma nova semana
+        console.log('⚠️ Semana não encontrada, tentando criar nova semana...');
+        await handleCreateWeekAndGoal(firstPlan, firstWeek);
+        
       } catch (error) {
-        console.warn('⚠️ Erro ao obter semanas do plano, usando fallback:', error);
-        // Fallback: usar formato padrão
-        setSelectedPlanForGoal({
-          planId: firstPlan.id,
-          weekId: `week_${firstWeek}`,
-          weekNumber: firstWeek,
-          planTitle: firstPlan.title
-        });
-        setShowGoalCreator(true);
+        console.error('❌ Erro ao obter semanas do plano:', error);
+        // Fallback: tentar criar semana
+        await handleCreateWeekAndGoal(firstPlan, firstWeek);
       }
     } else {
       console.warn('⚠️ Nenhum plano ativo encontrado para criar objetivo');
