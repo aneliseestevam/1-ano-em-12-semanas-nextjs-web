@@ -436,16 +436,22 @@ class PlanService {
   // Criar novo plano
   async createPlan(planData: Record<string, unknown>) {
     try {
+      console.log('🔄 PlanService: Criando novo plano:', planData);
       const response = await api.post('/plans', planData);
       
       if (response.data.success) {
+        console.log('✅ PlanService: Plano criado com sucesso:', response.data);
+        
         // Limpar cache de planos
         PlanService.cache.delete('all_plans');
-        return { success: true, data: response.data.data.plan };
+        
+        return { success: true, data: response.data.data.plan || response.data.data };
       } else {
+        console.error('❌ PlanService: Erro na resposta da API:', response.data);
         return { success: false, error: response.data.message || 'Erro ao criar plano' };
       }
     } catch (error: unknown) {
+      console.error('❌ PlanService: Erro ao criar plano:', error);
       const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
       return { success: false, error: errorMessage };
     }

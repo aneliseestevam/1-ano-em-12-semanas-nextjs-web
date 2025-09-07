@@ -9,6 +9,7 @@ import { dashboardService } from '../../../services/dashboardService';
 import { usePlansManager } from '../../../hooks/usePlansManager';
 import { planService } from '../../../services/planService';
 import { PageHeader } from '../../../components/ui';
+import PlansManager from '../../../components/dashboard/PlansManager';
 
 interface PlanStats {
   planId?: string;
@@ -55,11 +56,12 @@ interface Task {
 export default function PlansPage() {
   const { isAuthenticated, loading: authLoading } = useAuth();
   const router = useRouter();
-  const { plans, loading: plansLoading, loadPlans, activatePlan } = usePlansManager();
+  const { plans, loading: plansLoading, loadPlans, activatePlan, createPlan, deletePlan } = usePlansManager();
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [plansWithStats, setPlansWithStats] = useState<PlanWithStats[]>([]);
   const [statsLoading, setStatsLoading] = useState(false);
+  const [showPlansManager, setShowPlansManager] = useState(false);
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
@@ -197,8 +199,43 @@ export default function PlansPage() {
 
 
   const handleCreatePlan = () => {
-    // Implementar criação de plano
-    console.log('Create plan clicked');
+    setShowPlansManager(true);
+  };
+
+  const handleCreatePlanSubmit = async (title: string, description: string, startDate: Date, year: number) => {
+    try {
+      setError(null);
+      setSuccess(null);
+      
+      // Calcular endDate (12 semanas após startDate)
+      const endDate = new Date(startDate);
+      endDate.setDate(endDate.getDate() + (12 * 7)); // 12 semanas = 84 dias
+      
+      const planData = {
+        title: title.trim(),
+        description: description.trim(),
+        startDate: startDate,
+        endDate: endDate,
+        year: year,
+        status: 'active' as const
+      };
+
+      console.log('🔄 Criando novo plano:', planData);
+      
+      const result = await createPlan(planData);
+      
+      if (result.success) {
+        setSuccess('Plano criado com sucesso!');
+        setShowPlansManager(false);
+        // Recarregar estatísticas
+        await loadPlansStats();
+      } else {
+        setError(result.error || 'Erro ao criar plano');
+      }
+    } catch (error: unknown) {
+      console.error('❌ Erro ao criar plano:', error);
+      setError(error instanceof Error ? error.message : 'Erro ao criar plano');
+    }
   };
 
   const handleEditPlan = (planId: string) => {
@@ -209,12 +246,16 @@ export default function PlansPage() {
   const handleDeletePlan = async (planId: string) => {
     if (confirm('Tem certeza que deseja excluir este plano?')) {
       try {
-        const response = await dashboardService.deletePlan(planId);
-        if (response.success) {
-          await loadPlans();
+        setError(null);
+        setSuccess(null);
+        
+        const result = await deletePlan(planId);
+        if (result.success) {
           setSuccess('Plano excluído com sucesso!');
+          // Recarregar estatísticas
+          await loadPlansStats();
         } else {
-          setError('Erro ao excluir plano');
+          setError(result.error || 'Erro ao excluir plano');
         }
       } catch (error: unknown) {
         console.error('Error deleting plan:', error);
@@ -279,6 +320,20 @@ export default function PlansPage() {
         <PageHeader title="Meus Planos" icon={Target} iconColor="from-indigo-600 to-purple-600" />
 
         <main className="px-4 sm:px-6 lg:px-8 py-8">
+          {/* Botão de Criação de Planos */}
+          <div className="flex justify-between items-center mb-6">
+            <div>
+              <h2 className="text-2xl font-bold text-gray-900">Gerenciar Planos</h2>
+              <p className="text-gray-600 mt-1">Crie e gerencie seus planos de 12 semanas</p>
+            </div>
+            <button
+              onClick={handleCreatePlan}
+              className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-6 py-3 rounded-lg font-semibold hover:from-indigo-700 hover:to-purple-700 transition-all duration-300 flex items-center space-x-2 shadow-lg hover:shadow-xl transform hover:scale-105"
+            >
+              <Plus className="w-5 h-5" />
+              <span>Novo Plano</span>
+            </button>
+          </div>
           {/* Success Message */}
           {success && (
             <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
@@ -464,6 +519,18 @@ export default function PlansPage() {
             </div>
           )}
         </main>
+
+        {/* Plans Manager Modal */}
+        <PlansManager
+          open={showPlansManager}
+          onClose={() => setShowPlansManager(false)}
+          plans={plans || []}
+          currentPlanId={null}
+          onSelectPlan={() => {}}
+          onDeletePlan={handleDeletePlan}
+          onDuplicatePlan={() => {}}
+          onCreatePlan={handleCreatePlanSubmit}
+        />
     </div>
   );
 }
