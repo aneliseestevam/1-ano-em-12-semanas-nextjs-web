@@ -5,15 +5,14 @@ import { useAuth } from '../../../hooks/useAuth';
 import { useRouter } from 'next/navigation';
 import { BarChart3, TrendingUp, Download, Target, CheckCircle, Filter } from 'lucide-react';
 import { TwelveWeekPlan } from '../../../types/dashboard';
-import { dashboardService } from '../../../services/dashboardService';
-import DashboardNav from '../../../components/dashboard/DashboardNav';
+import { usePlansManager } from '../../../hooks/usePlansManager';
+import { PageHeader, StatCard, FilterBar, LoadingSpinner, EmptyState } from '../../../components/ui';
 
 export default function ReportsPage() {
   const { isAuthenticated, loading: authLoading } = useAuth();
   const router = useRouter();
-  const [plans, setPlans] = useState<TwelveWeekPlan[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { plans, loading: plansLoading, loadPlans } = usePlansManager();
+  const [apiStats, setApiStats] = useState<{ overview?: any; summary?: any } | null>(null);
   const [selectedPeriod, setSelectedPeriod] = useState<'week' | 'month' | 'quarter' | 'year'>('month');
   const [selectedPlan, setSelectedPlan] = useState<string>('all');
 
@@ -27,29 +26,49 @@ export default function ReportsPage() {
     if (isAuthenticated) {
       loadPlans();
     }
-  }, [isAuthenticated]);
+  }, [isAuthenticated, loadPlans]);
 
-  const loadPlans = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      
-      const response = await dashboardService.getPlans();
-      if (response.success && response.data) {
-        setPlans(response.data);
-      } else {
-        setPlans([]);
+  // Carregar estatísticas da API
+  useEffect(() => {
+    const loadApiStats = async () => {
+      try {
+        const { planService } = await import('../../../services/planService');
+        const statsResult = await planService.getAllPlansStats();
+        
+        if (statsResult.success && statsResult.data) {
+          setApiStats(statsResult.data);
+          console.log('✅ Estatísticas da API carregadas para reports:', {
+            overview: statsResult.data.overview,
+            summary: statsResult.data.summary
+          });
+        }
+      } catch {
+        console.warn('⚠️ Não foi possível carregar estatísticas da API para reports');
       }
-    } catch (error: unknown) {
-      console.error('Error loading plans:', error);
-      setError(error instanceof Error ? error.message : 'Erro ao carregar planos');
-      setPlans([]);
-    } finally {
-      setLoading(false);
-    }
-  };
+    };
+
+    loadApiStats();
+  }, []);
 
   const calculateStats = () => {
+    // Priorizar dados da API se disponíveis
+    if (apiStats?.overview) {
+      return {
+        totalPlans: apiStats.overview.plans?.totalPlans || 0,
+        completedPlans: apiStats.overview.plans?.completedPlans || 0,
+        activePlans: apiStats.overview.plans?.activePlans || 0,
+        totalGoals: apiStats.overview.goals?.totalGoals || 0,
+        completedGoals: apiStats.overview.goals?.completedGoals || 0,
+        totalTasks: apiStats.overview.tasks?.totalTasks || 0,
+        completedTasks: apiStats.overview.tasks?.completedTasks || 0,
+        goalCompletionRate: apiStats.summary?.goalCompletionRate || 0,
+        taskCompletionRate: apiStats.summary?.taskCompletionRate || 0,
+        planCompletionRate: apiStats.summary?.planCompletionRate || 0,
+        categoryStats: [] // Array vazio para evitar erro de .map()
+      };
+    }
+
+    // Fallback para dados locais
     if (!plans.length) return null;
 
     const totalPlans = plans.length;
@@ -148,10 +167,7 @@ export default function ReportsPage() {
   if (authLoading || !isAuthenticated) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Carregando...</p>
-        </div>
+        <LoadingSpinner message="Carregando..." />
       </div>
     );
   }
@@ -159,30 +175,8 @@ export default function ReportsPage() {
   const stats = calculateStats();
 
   return (
-    <div className="flex min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100">
-      <DashboardNav currentPage="reports" />
-      <div className="flex-1 lg:ml-64">
-        <header className="bg-white shadow-sm border-b border-gray-200">
-          <div className="px-4 sm:px-6 lg:px-8">
-            <div className="flex justify-between items-center py-4">
-              <div className="flex items-center space-x-2">
-                <div className="w-8 h-8 bg-gradient-to-br from-orange-600 to-red-600 rounded-lg flex items-center justify-center">
-                  <BarChart3 className="w-5 h-5 text-white" />
-                </div>
-                <h1 className="text-2xl font-bold text-gray-900">Relatórios</h1>
-              </div>
-              <div className="flex space-x-2">
-                <button
-                  onClick={() => handleExportReport('pdf')}
-                  className="bg-gradient-to-r from-orange-600 to-red-600 text-white px-4 py-2 rounded-lg font-semibold hover:from-orange-700 hover:to-red-700 transition-all duration-300 flex items-center space-x-2"
-                >
-                  <Download className="w-4 h-4" />
-                  <span>Exportar</span>
-                </button>
-              </div>
-            </div>
-          </div>
-        </header>
+    <div>
+        <PageHeader title="Relatórios" icon={BarChart3} iconColor="from-orange-600 to-red-600" />
 
         <main className="px-4 sm:px-6 lg:px-8 py-8">
           {/* Filters */}
@@ -217,7 +211,7 @@ export default function ReportsPage() {
             </div>
           </div>
 
-          {loading ? (
+          {plansLoading ? (
             <div className="text-center py-12">
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto mb-4"></div>
               <p className="text-gray-600">Carregando relatórios...</p>
@@ -307,7 +301,7 @@ export default function ReportsPage() {
               <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200 mb-8">
                 <h3 className="text-lg font-semibold text-gray-900 mb-6">Performance por Categoria</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {stats.categoryStats.map((category) => (
+                  {(stats.categoryStats || []).map((category) => (
                     <div key={category.category} className="border border-gray-200 rounded-lg p-4">
                       <div className="flex items-center justify-between mb-3">
                         <div className="flex items-center space-x-2">
@@ -384,14 +378,7 @@ export default function ReportsPage() {
             </>
           )}
 
-          {/* Error Display */}
-          {error && (
-            <div className="bg-red-50 border border-red-200 rounded-lg p-4 mt-8">
-              <p className="text-red-600">{error}</p>
-            </div>
-          )}
         </main>
-      </div>
     </div>
   );
 }

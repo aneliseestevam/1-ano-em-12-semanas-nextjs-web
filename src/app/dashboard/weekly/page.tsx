@@ -5,14 +5,14 @@ import { useAuth } from '../../../hooks/useAuth';
 import { useRouter } from 'next/navigation';
 import { Calendar, CheckCircle, Clock } from 'lucide-react';
 import { TwelveWeekPlan } from '../../../types/dashboard';
-import { dashboardService } from '../../../services/dashboardService';
-import DashboardNav from '../../../components/dashboard/DashboardNav';
+import { usePlansManager } from '../../../hooks/usePlansManager';
+import { PageHeader, StatCard, LoadingSpinner, EmptyState } from '../../../components/ui';
 
 export default function WeeklyPage() {
   const { isAuthenticated, loading: authLoading } = useAuth();
   const router = useRouter();
-  const [plans, setPlans] = useState<TwelveWeekPlan[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { plans, loading: plansLoading, loadPlans } = usePlansManager();
+  const [apiStats, setApiStats] = useState<{ overview?: { weeks?: { totalWeeks?: number; completedWeeks?: number; pendingWeeks?: number } } } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -25,27 +25,28 @@ export default function WeeklyPage() {
     if (isAuthenticated) {
       loadPlans();
     }
-  }, [isAuthenticated]);
+  }, [isAuthenticated, loadPlans]);
 
-  const loadPlans = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      
-      const response = await dashboardService.getPlans();
-      if (response.success && response.data) {
-        setPlans(response.data);
-      } else {
-        setPlans([]);
+  // Carregar estatísticas da API
+  useEffect(() => {
+    const loadApiStats = async () => {
+      try {
+        const { planService } = await import('../../../services/planService');
+        const statsResult = await planService.getAllPlansStats();
+        
+        if (statsResult.success && statsResult.data) {
+          setApiStats(statsResult.data);
+          console.log('✅ Estatísticas da API carregadas para weekly:', {
+            weeks: statsResult.data.overview?.weeks
+          });
+        }
+      } catch {
+        console.warn('⚠️ Não foi possível carregar estatísticas da API para weekly');
       }
-    } catch (error: unknown) {
-      console.error('Error loading plans:', error);
-      setError(error instanceof Error ? error.message : 'Erro ao carregar planos');
-      setPlans([]);
-    } finally {
-      setLoading(false);
-    }
-  };
+    };
+
+    loadApiStats();
+  }, []);
 
   if (authLoading || !isAuthenticated) {
     return (
@@ -65,64 +66,31 @@ export default function WeeklyPage() {
   const pendingWeeks = totalWeeks - completedWeeks;
 
   return (
-    <div className="flex min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100">
-      <DashboardNav currentPage="weekly" />
-      <div className="flex-1 lg:ml-64">
-        <header className="bg-white shadow-sm border-b border-gray-200">
-          <div className="px-4 sm:px-6 lg:px-8">
-            <div className="flex justify-between items-center py-4">
-              <div className="flex items-center space-x-2">
-                <div className="w-8 h-8 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-lg flex items-center justify-center">
-                  <Calendar className="w-5 h-5 text-white" />
-                </div>
-                <h1 className="text-2xl font-bold text-gray-900">Planejamento Semanal</h1>
-              </div>
-            </div>
-          </div>
-        </header>
+    <div>
+        <PageHeader title="Planejamento Semanal" icon={Calendar} iconColor="from-blue-600 to-indigo-600" />
 
         <main className="px-4 sm:px-6 lg:px-8 py-8">
           {/* Stats Cards */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-            <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">Total de Semanas</p>
-                  <p className="text-2xl font-bold text-gray-900">{totalWeeks}</p>
-                </div>
-                <div className="w-12 h-12 bg-indigo-100 rounded-lg flex items-center justify-center">
-                  <Calendar className="w-6 h-6 text-indigo-600" />
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">Semanas Concluídas</p>
-                  <p className="text-2xl font-bold text-green-600">{completedWeeks}</p>
-                </div>
-                <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-                  <CheckCircle className="w-6 h-6 text-green-600" />
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">Semanas Pendentes</p>
-                  <p className="text-2xl font-bold text-orange-600">{pendingWeeks}</p>
-                </div>
-                <div className="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center">
-                  <Clock className="w-6 h-6 text-orange-600" />
-                </div>
-              </div>
-            </div>
+            <StatCard 
+              value={totalWeeks}
+              label="Total de Semanas"
+              color="text-gray-900"
+            />
+            <StatCard 
+              value={completedWeeks}
+              label="Semanas Concluídas"
+              color="text-green-600"
+            />
+            <StatCard 
+              value={pendingWeeks}
+              label="Semanas Pendentes"
+              color="text-orange-600"
+            />
           </div>
 
           {/* Plans List */}
-          {loading ? (
+          {plansLoading ? (
             <div className="text-center py-12">
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto mb-4"></div>
               <p className="text-gray-600">Carregando semanas...</p>
@@ -179,7 +147,6 @@ export default function WeeklyPage() {
             </div>
           )}
         </main>
-      </div>
     </div>
   );
 }

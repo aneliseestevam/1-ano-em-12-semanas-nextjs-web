@@ -1,17 +1,18 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../../../hooks/useAuth';
 import { useRouter } from 'next/navigation';
 import { Target, Clock, Search } from 'lucide-react';
 import { Goal } from '../../../types/dashboard';
 import { usePlansManager } from '../../../hooks/usePlansManager';
-import DashboardNav from '../../../components/dashboard/DashboardNav';
+import { PageHeader, ProgressCard, StatCard, FilterBar, ButtonGroup, LoadingSpinner, EmptyState } from '../../../components/ui';
 
 interface GoalWithPlanInfo extends Goal {
   planId: string;
   planTitle: string;
   weekNumber: number;
+  weekId: string;
 }
 
 export default function ObjectivesPage() {
@@ -19,13 +20,19 @@ export default function ObjectivesPage() {
   const router = useRouter();
   const { plans, loading: plansLoading, loadPlans } = usePlansManager();
   const [allGoals, setAllGoals] = useState<GoalWithPlanInfo[]>([]);
-  const [filteredGoals, setFilteredGoals] = useState<GoalWithPlanInfo[]>([]);
   const [error] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'completed' | 'pending'>('all');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [activePlanFilter, setActivePlanFilter] = useState<string>('all');
   const [apiStats, setApiStats] = useState<{ overview?: { plans?: { completedPlans?: number; activePlans?: number; totalPlans?: number; avgDuration?: number }; goals?: { completedGoals?: number; pendingGoals?: number } } } | null>(null);
+  const [goalsLoading, setGoalsLoading] = useState(false);
+  const [updatingGoal, setUpdatingGoal] = useState<string | null>(null);
+  const [selectedWeek, setSelectedWeek] = useState<number | 'all'>('all');
+  const [availableWeeks, setAvailableWeeks] = useState<number[]>([]);
+  const [currentWeek, setCurrentWeek] = useState<number>(1);
+  const [loadedWeeks, setLoadedWeeks] = useState<Set<number>>(new Set());
+  const [apiOffline, setApiOffline] = useState(false);
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
@@ -40,14 +47,433 @@ export default function ObjectivesPage() {
   }, [isAuthenticated]);
 
   useEffect(() => {
-    if (plans.length > 0) {
-      extractGoalsFromPlans();
+    if (isAuthenticated && !plansLoading) {
+      loadPlansAndWeeks();
     }
-  }, [plans]);
+  }, [isAuthenticated, plansLoading]);
 
   useEffect(() => {
-    filterGoals();
-  }, [allGoals, searchTerm, statusFilter, categoryFilter, activePlanFilter]);
+    if (selectedWeek !== 'all' && typeof selectedWeek === 'number') {
+      loadGoalsForWeek(selectedWeek);
+    } else if (selectedWeek === 'all') {
+      loadAllGoalsFromAPI();
+    }
+  }, [selectedWeek]);
+
+
+  // Otimizar filtros com useMemo
+  const filteredGoals = useMemo(() => {
+    let filtered = allGoals;
+
+    // Filtro por semana
+    if (selectedWeek !== 'all') {
+      filtered = filtered.filter(goal => goal.weekNumber === selectedWeek);
+    }
+
+    // Filtro por status
+    if (statusFilter !== 'all') {
+      filtered = filtered.filter(goal => 
+        statusFilter === 'completed' ? goal.completed : !goal.completed
+      );
+    }
+
+    // Filtro por categoria
+    if (categoryFilter !== 'all') {
+      filtered = filtered.filter(goal => goal.category === categoryFilter);
+    }
+
+    // Filtro por plano ativo
+    if (activePlanFilter !== 'all') {
+      filtered = filtered.filter(goal => goal.planId === activePlanFilter);
+    }
+
+    // Filtro por busca
+    if (searchTerm.trim()) {
+      const searchLower = searchTerm.toLowerCase();
+      filtered = filtered.filter(goal => 
+        goal.title.toLowerCase().includes(searchLower) ||
+        goal.description?.toLowerCase().includes(searchLower)
+      );
+    }
+
+    return filtered;
+  }, [allGoals, selectedWeek, statusFilter, categoryFilter, activePlanFilter, searchTerm]);
+
+  const loadPlansAndWeeks = async () => {
+    try {
+      console.log('🚀 Carregando planos com objetivos usando nova API otimizada...');
+      
+      // Usar a nova API otimizada que retorna tudo em uma única requisição
+      const { default: plansWithGoalsService } = await import('../../../services/plansWithGoalsService');
+      const result = await plansWithGoalsService.getActivePlansWithGoals();
+      
+      console.log('🔍 loadPlansAndWeeks: Resultado da nova API:', {
+        success: result.success,
+        hasData: !!result.data,
+        plansLength: result.data?.plans?.length || 0,
+        message: result.message
+      });
+      
+      if (result.success && result.data.plans.length > 0) {
+        const activePlan = result.data.plans[0]; // Pegar o primeiro plano ativo
+        
+        if (activePlan.weeks && activePlan.weeks.length > 0) {
+          const weeksArray = activePlan.weeks
+            .map((week: any) => week.weekNumber)
+            .filter((weekNumber: number) => weekNumber > 0)
+            .sort((a: number, b: number) => a - b);
+          
+          setAvailableWeeks(weeksArray);
+          
+          // Definir semana atual (primeira semana disponível)
+          if (weeksArray.length > 0) {
+            setCurrentWeek(weeksArray[0]);
+            setSelectedWeek(weeksArray[0]);
+            
+            // Carregar objetivos da semana atual diretamente dos dados já carregados
+            console.log(`🚀 Carregando objetivos da semana ${weeksArray[0]} dos dados já carregados`);
+            loadGoalsFromPlanData(activePlan, weeksArray[0]);
+          }
+          
+          console.log('📅 Semanas disponíveis (nova API):', weeksArray);
+          console.log('✅ Planos e objetivos carregados com sucesso em uma única requisição!');
+        } else {
+          console.warn('⚠️ Plano ativo encontrado mas sem semanas');
+        }
+      } else {
+        console.warn('⚠️ Nenhum plano ativo encontrado:', result.message);
+        
+        // Fallback: tentar método antigo se a nova API falhar
+        console.log('🔄 Tentando fallback com método antigo...');
+        try {
+          const { default: optimizedPlanService } = await import('../../../services/optimizedPlanService');
+          const plansResult = await optimizedPlanService.getPlansBasic();
+          
+          if (plansResult.success && plansResult.data && plansResult.data.length > 0) {
+            const activePlan = plansResult.data.find((plan: any) => plan.status === 'active');
+            
+            if (activePlan) {
+              const weeksResult = await optimizedPlanService.getPlanWeeks(activePlan.id);
+              
+              if (weeksResult.success && weeksResult.data.length > 0) {
+                const weeksArray = weeksResult.data
+                  .map((week: any) => week.weekNumber)
+                  .filter((weekNumber: number) => weekNumber > 0)
+                  .sort((a: number, b: number) => a - b);
+                
+                setAvailableWeeks(weeksArray);
+                
+                if (weeksArray.length > 0) {
+                  setCurrentWeek(weeksArray[0]);
+                  setSelectedWeek(weeksArray[0]);
+                  loadGoalsForWeekOptimized(activePlan.id, weeksArray[0]);
+                }
+                
+                console.log('📅 Semanas disponíveis (fallback):', weeksArray);
+                return;
+              }
+            }
+          }
+        } catch (fallbackError) {
+          console.error('❌ Fallback também falhou:', fallbackError);
+        }
+        
+        // Último fallback: criar semanas padrão (1-12)
+        const defaultWeeks = Array.from({ length: 12 }, (_, i) => i + 1);
+        setAvailableWeeks(defaultWeeks);
+        setCurrentWeek(1);
+        setSelectedWeek(1);
+        
+        console.log('🚀 Carregando apenas a semana 1 (padrão)');
+        loadGoalsForWeek(1);
+        
+        console.log('📅 Usando semanas padrão:', defaultWeeks);
+      }
+    } catch (error) {
+      console.error('❌ Erro ao carregar planos com objetivos:', error);
+      
+      // Fallback: tentar método antigo se a nova API falhar
+      console.log('🔄 Tentando fallback com método antigo...');
+      try {
+        const { default: optimizedPlanService } = await import('../../../services/optimizedPlanService');
+        const plansResult = await optimizedPlanService.getPlansBasic();
+        
+        if (plansResult.success && plansResult.data && plansResult.data.length > 0) {
+          const activePlan = plansResult.data.find((plan: any) => plan.status === 'active');
+          
+          if (activePlan) {
+            const weeksResult = await optimizedPlanService.getPlanWeeks(activePlan.id);
+            
+            if (weeksResult.success && weeksResult.data.length > 0) {
+              const weeksArray = weeksResult.data
+                .map((week: any) => week.weekNumber)
+                .filter((weekNumber: number) => weekNumber > 0)
+                .sort((a: number, b: number) => a - b);
+              
+              setAvailableWeeks(weeksArray);
+              
+              if (weeksArray.length > 0) {
+                setCurrentWeek(weeksArray[0]);
+                setSelectedWeek(weeksArray[0]);
+                loadGoalsForWeekOptimized(activePlan.id, weeksArray[0]);
+              }
+              
+              console.log('📅 Semanas disponíveis (fallback):', weeksArray);
+              return;
+            }
+          }
+        }
+      } catch (fallbackError) {
+        console.error('❌ Fallback também falhou:', fallbackError);
+      }
+      
+      // Último fallback: criar semanas padrão (1-12)
+      const defaultWeeks = Array.from({ length: 12 }, (_, i) => i + 1);
+      setAvailableWeeks(defaultWeeks);
+      setCurrentWeek(1);
+      setSelectedWeek(1);
+      
+      console.log('🚀 Carregando apenas a semana 1 (padrão)');
+      loadGoalsForWeek(1);
+      
+      console.log('📅 Usando semanas padrão:', defaultWeeks);
+    }
+  };
+
+  // Nova função para carregar objetivos diretamente dos dados do plano
+  const loadGoalsFromPlanData = (planData: { _id: string; title: string; weeks: Array<{ _id: string; weekNumber: number; goals: Array<{ _id: string; id?: string; title: string; description: string; category: string; priority: string; status: string; completed: boolean; targetDate?: string; completedAt?: string; createdAt: string; updatedAt: string; tasks: unknown[] }> }> }, weekNumber: number) => {
+    try {
+      console.log(`🚀 loadGoalsFromPlanData: Carregando objetivos da semana ${weekNumber} dos dados do plano`);
+      
+      const week = planData.weeks.find((w) => w.weekNumber === weekNumber);
+      if (!week || !week.goals) {
+        console.warn(`⚠️ Semana ${weekNumber} não encontrada ou sem objetivos`);
+        return;
+      }
+      
+      const goalsWithPlanInfo: GoalWithPlanInfo[] = week.goals.map((goal) => ({
+        id: goal._id || goal.id,
+        title: goal.title,
+        description: goal.description,
+        category: goal.category,
+        priority: goal.priority,
+        status: goal.status,
+        completed: goal.completed,
+        targetDate: goal.targetDate ? new Date(goal.targetDate) : undefined,
+        completedAt: goal.completedAt ? new Date(goal.completedAt) : undefined,
+        createdAt: goal.createdAt ? new Date(goal.createdAt) : new Date(),
+        updatedAt: goal.updatedAt ? new Date(goal.updatedAt) : new Date(),
+        tasks: goal.tasks || [],
+        planId: planData._id,
+        planTitle: planData.title,
+        weekNumber: weekNumber,
+        weekId: week._id
+      }));
+      
+      setAllGoals(goalsWithPlanInfo);
+      setLoadedWeeks(prev => new Set([...prev, weekNumber]));
+      
+      console.log(`✅ loadGoalsFromPlanData: ${goalsWithPlanInfo.length} objetivos carregados da semana ${weekNumber}`);
+    } catch (error) {
+      console.error(`❌ loadGoalsFromPlanData: Erro ao carregar objetivos da semana ${weekNumber}:`, error);
+    }
+  };
+
+  const loadGoalsForWeekOptimized = async (planId: string, weekNumber: number) => {
+    // Verificar se a semana já foi carregada
+    if (loadedWeeks.has(weekNumber)) {
+      console.log(`📦 Semana ${weekNumber} já carregada, usando cache`);
+      // Filtrar objetivos da semana já carregada
+      const weekGoals = allGoals.filter(goal => goal.weekNumber === weekNumber);
+      if (weekGoals.length > 0) {
+        setAllGoals(weekGoals);
+      }
+      return;
+    }
+
+    setGoalsLoading(true);
+    try {
+      console.log(`🔄 Carregando objetivos da semana ${weekNumber} (otimizado)...`);
+      
+      const { default: optimizedPlanService } = await import('../../../services/optimizedPlanService');
+      const weekDataResult = await optimizedPlanService.getWeekData(planId, weekNumber);
+      
+      if (weekDataResult.success && weekDataResult.data) {
+        const { week, goals } = weekDataResult.data;
+        
+        const allGoals: GoalWithPlanInfo[] = goals.map((goal: any) => ({
+          ...goal,
+          id: goal.id || goal._id,
+          planId: planId,
+          planTitle: 'Plano Ativo', // Pode ser melhorado
+          weekNumber: weekNumber,
+          weekId: week?.id || `week_${weekNumber}`
+        }));
+        
+        console.log(`✅ Objetivos carregados da semana ${weekNumber} (otimizado):`, allGoals.length);
+        setAllGoals(allGoals);
+        
+        // Marcar semana como carregada
+        setLoadedWeeks(prev => new Set([...prev, weekNumber]));
+      } else {
+        console.warn(`⚠️ Não foi possível carregar dados da semana ${weekNumber}`);
+      }
+      
+    } catch (error) {
+      console.error('❌ Erro ao carregar objetivos da semana (otimizado):', error);
+    } finally {
+      setGoalsLoading(false);
+    }
+  };
+
+  const loadGoalsForWeek = async (weekNumber: number) => {
+    console.log(`🔄 loadGoalsForWeek: Carregando semana ${weekNumber}...`);
+    
+    // Primeiro, verificar se já temos dados carregados de todas as semanas
+    // Se sim, apenas verificar se a semana específica existe
+    if (allGoals.length > 0) {
+      const weekGoals = allGoals.filter(goal => goal.weekNumber === weekNumber);
+      console.log(`📦 Usando dados já carregados: ${weekGoals.length} objetivos da semana ${weekNumber}`);
+      
+      if (weekGoals.length > 0) {
+        // Se encontrou objetivos da semana, não alterar allGoals - apenas retornar
+        // O filtro será feito pelo useMemo filteredGoals
+        console.log(`✅ Semana ${weekNumber} já carregada, usando filtro local`);
+        return;
+      }
+    }
+
+    // Se não temos dados ou a semana específica não foi encontrada,
+    // carregar todos os dados uma vez e depois filtrar
+    setGoalsLoading(true);
+    try {
+      console.log(`🔄 Carregando todos os dados para filtrar semana ${weekNumber}...`);
+      
+      // Usar a nova API otimizada que já carregou todos os dados
+      const { default: plansWithGoalsService } = await import('../../../services/plansWithGoalsService');
+      const result = await plansWithGoalsService.getActivePlansWithGoals();
+      
+      if (!result.success || !result.data.plans.length) {
+        console.warn('⚠️ Não foi possível carregar planos com objetivos');
+        setGoalsLoading(false);
+        return;
+      }
+
+      const allPlans = result.data.plans;
+      const allGoalsFromAPI: GoalWithPlanInfo[] = [];
+
+      // Carregar TODOS os objetivos de TODAS as semanas
+      for (const plan of allPlans) {
+        if (plan.weeks && plan.weeks.length > 0) {
+          for (const week of plan.weeks) {
+            if (week.goals && week.goals.length > 0) {
+              week.goals.forEach((goal: any) => {
+                const goalData = {
+                  ...goal,
+                  id: goal.id || goal._id,
+                  planId: plan._id,
+                  planTitle: plan.title,
+                  weekNumber: week.weekNumber,
+                  weekId: week._id
+                };
+                
+                // Log detalhado para debug
+                console.log(`🔍 Objetivo carregado:`, {
+                  id: goalData.id,
+                  title: goalData.title,
+                  weekNumber: goalData.weekNumber,
+                  completed: goalData.completed,
+                  completedType: typeof goalData.completed,
+                  originalGoal: goal
+                });
+                
+                allGoalsFromAPI.push(goalData);
+              });
+            }
+          }
+        }
+      }
+
+      console.log(`✅ Total de objetivos carregados de todas as semanas:`, allGoalsFromAPI.length);
+      
+      // Salvar todos os objetivos no estado (não filtrar por semana)
+      setAllGoals(allGoalsFromAPI);
+      
+      // Marcar todas as semanas como carregadas
+      const allWeekNumbers = [...new Set(allGoalsFromAPI.map(goal => goal.weekNumber))];
+      setLoadedWeeks(new Set(allWeekNumbers));
+      
+      console.log(`📅 Semanas carregadas:`, allWeekNumbers);
+      console.log(`📊 Objetivos por semana:`, allWeekNumbers.map(week => ({
+        week,
+        total: allGoalsFromAPI.filter(g => g.weekNumber === week).length,
+        completed: allGoalsFromAPI.filter(g => g.weekNumber === week && g.completed).length
+      })));
+      
+    } catch (error) {
+      console.error('❌ Erro ao carregar objetivos da semana:', error);
+    } finally {
+      setGoalsLoading(false);
+    }
+  };
+
+  const loadAllGoalsFromAPI = async () => {
+    setGoalsLoading(true);
+    try {
+      console.log('🔄 Carregando todos os objetivos usando dados já carregados...');
+      
+      // Usar a nova API otimizada que já carregou todos os dados
+      const { default: plansWithGoalsService } = await import('../../../services/plansWithGoalsService');
+      const result = await plansWithGoalsService.getActivePlansWithGoals();
+      
+      if (!result.success || !result.data.plans.length) {
+        console.warn('⚠️ Não foi possível carregar planos com objetivos');
+        setGoalsLoading(false);
+        return;
+      }
+
+      const allPlans = result.data.plans;
+      console.log('📋 Planos carregados:', allPlans.length);
+
+      // Extrair todos os objetivos de todos os planos e semanas
+      const allGoals: GoalWithPlanInfo[] = [];
+
+      for (const plan of allPlans) {
+        if (plan.weeks && plan.weeks.length > 0) {
+          for (const week of plan.weeks) {
+            if (week.goals && week.goals.length > 0) {
+              week.goals.forEach((goal: any) => {
+                allGoals.push({
+                  ...goal,
+                  id: goal.id || goal._id,
+                  planId: plan._id,
+                  planTitle: plan.title,
+                  weekNumber: week.weekNumber,
+                  weekId: week._id
+                });
+              });
+              
+              console.log(`✅ Objetivos carregados da semana ${week.weekNumber} do plano ${plan.title}:`, week.goals.length);
+            }
+          }
+        }
+      }
+
+      console.log('✅ Total de objetivos carregados (otimizado):', allGoals.length);
+      setAllGoals(allGoals);
+      
+      // Marcar todas as semanas como carregadas
+      const allWeekNumbers = [...new Set(allGoals.map(goal => goal.weekNumber))];
+      setLoadedWeeks(new Set(allWeekNumbers));
+      
+      console.log(`📅 Semanas disponíveis:`, allWeekNumbers);
+    } catch (error) {
+      console.error('❌ Erro ao carregar objetivos da API:', error);
+    } finally {
+      setGoalsLoading(false);
+    }
+  };
+
 
   // Buscar estatísticas da API em background
   useEffect(() => {
@@ -70,66 +496,11 @@ export default function ObjectivesPage() {
       }
     };
 
-    if (plans.length > 0) {
-      loadApiStats();
-    }
-  }, [plans]);
+    // Carregar stats da API sempre, independente dos planos locais
+    loadApiStats();
+  }, []);
 
-  const extractGoalsFromPlans = () => {
-    const goals: GoalWithPlanInfo[] = [];
-    
-    // Filtrar apenas planos ativos
-    const activePlans = plans.filter(plan => 
-      plan.status === 'active' || 
-      (plan.weeks && plan.weeks.length > 0 && plan.weeks.some(week => week.goals && week.goals.length > 0))
-    );
-    
-    activePlans.forEach(plan => {
-      if (plan.weeks) {
-        plan.weeks.forEach(week => {
-          if (week.goals) {
-            week.goals.forEach(goal => {
-              goals.push({
-                ...goal,
-                planId: plan.id,
-                planTitle: plan.title,
-                weekNumber: week.weekNumber
-              });
-            });
-          }
-        });
-      }
-    });
-    
-    setAllGoals(goals);
-  };
 
-  const filterGoals = () => {
-    let filtered = [...allGoals];
-
-    if (searchTerm) {
-      filtered = filtered.filter(goal => 
-        goal.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        goal.description?.toLowerCase().includes(searchTerm.toLowerCase())
-      );
-    }
-
-    if (statusFilter !== 'all') {
-      filtered = filtered.filter(goal => 
-        statusFilter === 'completed' ? goal.completed : !goal.completed
-      );
-    }
-
-    if (categoryFilter !== 'all') {
-      filtered = filtered.filter(goal => goal.category === categoryFilter);
-    }
-
-    if (activePlanFilter !== 'all') {
-      filtered = filtered.filter(goal => goal.planId === activePlanFilter);
-    }
-
-    setFilteredGoals(filtered);
-  };
 
   const getCategoryColor = (category: string) => {
     const colors = {
@@ -155,6 +526,66 @@ export default function ObjectivesPage() {
     return labels[category as keyof typeof labels] || 'Outros';
   };
 
+  const toggleGoalCompletion = async (goal: GoalWithPlanInfo) => {
+    console.log('🔍 toggleGoalCompletion: Objetivo recebido:', goal);
+    console.log('🔍 toggleGoalCompletion: Propriedades do objetivo:', {
+      id: goal.id,
+      _id: (goal as any)._id,
+      planId: goal.planId,
+      weekId: goal.weekId,
+      weekNumber: goal.weekNumber,
+      title: goal.title,
+      completed: goal.completed
+    });
+
+    // Validar se todos os parâmetros necessários estão definidos
+    if (!goal.id || !goal.planId || !goal.weekId) {
+      console.error('❌ toggleGoalCompletion: Parâmetros inválidos:', {
+        goalId: goal.id,
+        planId: goal.planId,
+        weekId: goal.weekId,
+        goal
+      });
+      return;
+    }
+
+    setUpdatingGoal(goal.id);
+    try {
+      console.log('🔄 toggleGoalCompletion: Dados do objetivo:', {
+        goalId: goal.id,
+        planId: goal.planId,
+        weekId: goal.weekId,
+        weekNumber: goal.weekNumber,
+        title: goal.title
+      });
+
+      const { goalService } = await import('../../../services/goalService');
+      
+      const newCompletedStatus = !goal.completed;
+      const result = await goalService.updateGoal(goal.planId, goal.weekId, goal.id, {
+        completed: newCompletedStatus
+      });
+
+      if (result.success) {
+        // Atualizar o estado local
+        setAllGoals(prevGoals => 
+          prevGoals.map(g => 
+            g.id === goal.id 
+              ? { ...g, completed: newCompletedStatus }
+              : g
+          )
+        );
+        console.log(`✅ Objetivo ${goal.title} ${newCompletedStatus ? 'concluído' : 'reaberto'}`);
+      } else {
+        console.error('❌ Erro ao atualizar objetivo:', result.error);
+      }
+    } catch (error) {
+      console.error('❌ Erro ao atualizar objetivo:', error);
+    } finally {
+      setUpdatingGoal(null);
+    }
+  };
+
   if (authLoading || !isAuthenticated) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 flex items-center justify-center">
@@ -166,262 +597,404 @@ export default function ObjectivesPage() {
     );
   }
 
-  const completedGoals = allGoals.filter(goal => goal.completed).length;
-  const pendingGoals = allGoals.filter(goal => !goal.completed).length;
-  const totalGoals = allGoals.length;
+  // Função auxiliar para verificar se um objetivo está concluído
+  const isGoalCompleted = (goal: any): boolean => {
+    // Verificar diferentes formatos possíveis de completed
+    if (goal.completed === true || goal.completed === 'true' || goal.completed === 1) {
+      return true;
+    }
+    
+    // Verificar se é false, 'false', 0, null, undefined
+    if (goal.completed === false || goal.completed === 'false' || goal.completed === 0 || 
+        goal.completed === null || goal.completed === undefined) {
+      return false;
+    }
+    
+    // Se não conseguir determinar, considerar como não concluído
+    console.warn(`⚠️ Estado de completed não reconhecido para objetivo ${goal.id}:`, goal.completed);
+    return false;
+  };
 
-  // Calcular estatísticas do plano ativo
-  const activePlans = plans.filter(plan => 
+  // Calcular estatísticas baseadas na semana selecionada
+  const getWeekStats = () => {
+    if (selectedWeek === 'all') {
+      // Se "todas" as semanas estão selecionadas, mostrar estatísticas globais
+      const completedGoals = allGoals.filter(goal => isGoalCompleted(goal)).length;
+      const pendingGoals = allGoals.filter(goal => !isGoalCompleted(goal)).length;
+      const totalGoals = allGoals.length;
+      
+      console.log(`📊 Estatísticas GLOBAIS:`, {
+        totalGoals,
+        completedGoals,
+        pendingGoals,
+        allGoalsSample: allGoals.slice(0, 5).map(g => ({ 
+          id: g.id, 
+          title: g.title, 
+          completed: g.completed, 
+          completedType: typeof g.completed,
+          isCompleted: isGoalCompleted(g),
+          weekNumber: g.weekNumber 
+        }))
+      });
+      
+      return { completedGoals, pendingGoals, totalGoals };
+    } else {
+      // Se uma semana específica está selecionada, mostrar estatísticas dessa semana
+      const weekGoals = allGoals.filter(goal => goal.weekNumber === selectedWeek);
+      
+      const completedGoals = weekGoals.filter(goal => isGoalCompleted(goal)).length;
+      const pendingGoals = weekGoals.filter(goal => !isGoalCompleted(goal)).length;
+      const totalGoals = weekGoals.length;
+      
+      console.log(`📊 Estatísticas da SEMANA ${selectedWeek}:`, {
+        totalGoals,
+        completedGoals,
+        pendingGoals,
+        weekGoalsSample: weekGoals.slice(0, 5).map(g => ({ 
+          id: g.id, 
+          title: g.title, 
+          completed: g.completed, 
+          completedType: typeof g.completed,
+          isCompleted: isGoalCompleted(g),
+          weekNumber: g.weekNumber 
+        })),
+        allWeekGoals: weekGoals.map(g => ({ 
+          id: g.id, 
+          title: g.title, 
+          completed: g.completed, 
+          isCompleted: isGoalCompleted(g) 
+        }))
+      });
+      
+      return { completedGoals, pendingGoals, totalGoals };
+    }
+  };
+
+  const weekStats = getWeekStats();
+  const completedGoals = weekStats.completedGoals;
+  const pendingGoals = weekStats.pendingGoals;
+  const totalGoals = weekStats.totalGoals;
+
+  // Log para debug das estatísticas
+  console.log(`📊 Estatísticas da semana ${selectedWeek}:`, {
+    selectedWeek,
+    completedGoals,
+    pendingGoals,
+    totalGoals,
+    allGoalsCount: allGoals.length,
+    weekGoals: selectedWeek !== 'all' ? allGoals.filter(goal => goal.weekNumber === selectedWeek) : 'all',
+    weekGoalsCompleted: selectedWeek !== 'all' ? allGoals.filter(goal => goal.weekNumber === selectedWeek && goal.completed) : 'all'
+  });
+
+  // Calcular estatísticas do plano ativo de forma segura
+  const activePlans = plans?.filter(plan => 
     plan.status === 'active' || 
-    (plan.weeks && plan.weeks.length > 0 && plan.weeks.some(week => week.goals && week.goals.length > 0))
-  );
+    (plan.weeks && plan.weeks.length > 0)
+  ) || [];
 
   const currentPlan = activePlans[0]; // Pegar o primeiro plano ativo
-  const totalWeeks = currentPlan?.weeks?.length || 0;
-  const completedWeeks = currentPlan?.weeks?.filter(week => 
-    week.goals && week.goals.length > 0 && week.goals.every(goal => goal.completed)
-  ).length || 0;
+  const totalWeeks = currentPlan?.weeks?.length || availableWeeks.length || 0;
   
-  // Calcular semana atual (baseado na data atual)
-  const currentWeek = currentPlan ? (() => {
-    const now = new Date();
-    const startDate = new Date(currentPlan.startDate);
-    const weeksSinceStart = Math.floor((now.getTime() - startDate.getTime()) / (7 * 24 * 60 * 60 * 1000));
-    return Math.min(Math.max(weeksSinceStart + 1, 1), totalWeeks);
-  })() : 1;
+  // Calcular semanas concluídas de forma mais simples
+  const completedWeeks = Math.min(
+    Math.floor((completedGoals / Math.max(totalGoals, 1)) * totalWeeks),
+    totalWeeks
+  );
 
-  // Calcular progresso geral do plano
+  // Calcular progresso baseado na semana selecionada
   const overallProgress = totalGoals > 0 ? Math.round((completedGoals / totalGoals) * 100) : 0;
   
   // Calcular média de objetivos por semana
   const avgObjectivesPerWeek = totalWeeks > 0 ? (totalGoals / totalWeeks).toFixed(1) : '0.0';
 
   return (
-    <div className="flex min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100">
-      <DashboardNav currentPage="objectives" />
-      <div className="flex-1 lg:ml-64">
-        <header className="bg-white shadow-sm border-b border-gray-200">
-          <div className="px-4 sm:px-6 lg:px-8">
-            <div className="flex justify-between items-center py-4">
-              <div className="flex items-center space-x-2">
-                <div className="w-8 h-8 bg-gradient-to-br from-green-600 to-emerald-600 rounded-lg flex items-center justify-center">
-                  <Target className="w-5 h-5 text-white" />
-                </div>
-                <h1 className="text-2xl font-bold text-gray-900">Objetivos do Plano Ativo</h1>
-                <p className="text-sm text-gray-600 mt-1">
-                  Visualize e gerencie os objetivos do seu plano ativo atual
-                </p>
-              </div>
-            </div>
-          </div>
-        </header>
+    <div>
+      <PageHeader title="Objetivos" icon={Target} />
 
         <main className="px-4 sm:px-6 lg:px-8 py-8">
-          {/* Progresso Geral */}
-          <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200 mb-8">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-gray-900">Progresso Geral</h2>
-              <span className="text-2xl font-bold text-gray-900">{overallProgress}%</span>
+          {/* Notificação de API Offline */}
+          {apiOffline && (
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
+              <div className="flex items-center">
+                <div className="flex-shrink-0">
+                  <svg className="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                  </svg>
+                </div>
+                <div className="ml-3">
+                  <h3 className="text-sm font-medium text-yellow-800">
+                    API Temporariamente Offline
+                  </h3>
+                  <div className="mt-2 text-sm text-yellow-700">
+                    <p>Estamos exibindo dados de demonstração. Algumas funcionalidades podem estar limitadas.</p>
+                  </div>
+                </div>
+              </div>
             </div>
-            <div className="w-full bg-gray-200 rounded-full h-3">
-              <div 
-                className="bg-gradient-to-r from-purple-500 to-purple-600 h-3 rounded-full transition-all duration-500"
-                style={{ width: `${overallProgress}%` }}
-              ></div>
-            </div>
-          </div>
+          )}
+
+          {/* Progresso */}
+          <ProgressCard 
+            title={selectedWeek === 'all' ? "Progresso Geral" : `Progresso da Semana ${selectedWeek}`}
+            percentage={overallProgress} 
+            className="mb-6"
+          />
 
           {/* Status Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-            <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
-              <div className="text-center">
-                <p className="text-3xl font-bold text-blue-600 mb-2">
-                  {apiStats?.overview?.plans?.completedPlans || completedWeeks}
-                </p>
-                <p className="text-sm font-medium text-gray-600">
-                  {apiStats ? 'Planos Concluídos' : 'Semanas Concluídas'}
-                </p>
-              </div>
-            </div>
-
-            <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
-              <div className="text-center">
-                <p className="text-3xl font-bold text-green-600 mb-2">
-                  {apiStats?.overview?.goals?.completedGoals || completedGoals}
-                </p>
-                <p className="text-sm font-medium text-gray-600">Objetivos Concluídos</p>
-              </div>
-            </div>
-
-            <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
-              <div className="text-center">
-                <p className="text-3xl font-bold text-orange-600 mb-2">
-                  {apiStats?.overview?.goals?.pendingGoals || pendingGoals}
-                </p>
-                <p className="text-sm font-medium text-gray-600">Objetivos Pendentes</p>
-              </div>
-            </div>
-
-            <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
-              <div className="text-center">
-                <p className="text-3xl font-bold text-indigo-600 mb-2">
-                  {apiStats?.overview?.plans?.activePlans || currentWeek}
-                </p>
-                <p className="text-sm font-medium text-gray-600">
-                  {apiStats ? 'Planos Ativos' : 'Semana Atual'}
-                </p>
-              </div>
-            </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+            <StatCard 
+              value={selectedWeek === 'all' ? (apiStats?.overview?.goals?.completedGoals || completedGoals) : completedGoals}
+              label={selectedWeek === 'all' ? "Concluídos" : `Concluídos (Semana ${selectedWeek})`}
+              color="text-green-600"
+            />
+            <StatCard 
+              value={selectedWeek === 'all' ? (apiStats?.overview?.goals?.pendingGoals || pendingGoals) : pendingGoals}
+              label={selectedWeek === 'all' ? "Pendentes" : `Pendentes (Semana ${selectedWeek})`}
+              color="text-orange-600"
+            />
+            <StatCard 
+              value={availableWeeks.length}
+              label="Semanas"
+              color="text-blue-600"
+            />
+            <StatCard 
+              value={currentWeek}
+              label="Atual"
+              color="text-purple-600"
+            />
           </div>
 
-          {/* Estatísticas dos Objetivos */}
-          <div className="bg-gradient-to-r from-purple-50 to-indigo-50 rounded-xl shadow-sm p-6 border border-purple-200 mb-8">
-            <div className="flex items-center space-x-2 mb-4">
-              <div className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center">
-                <Target className="w-5 h-5 text-green-600" />
-              </div>
-              <h2 className="text-lg font-semibold text-gray-900">Estatísticas dos Objetivos</h2>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="flex items-center space-x-3">
-                <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
-                  <Target className="w-4 h-4 text-blue-600" />
-                </div>
-                <span className="text-gray-700 font-medium">
-                  {apiStats ? `${apiStats.overview?.plans?.totalPlans || 0} planos no total` : `${totalGoals} objetivos no total`}
-                </span>
-              </div>
-              <div className="flex items-center space-x-3">
-                <div className="w-8 h-8 bg-yellow-100 rounded-lg flex items-center justify-center">
-                  <Clock className="w-4 h-4 text-yellow-600" />
-                </div>
-                <span className="text-gray-700 font-medium">
-                  {apiStats ? `${apiStats.overview?.plans?.avgDuration || 0} dias em média` : `${avgObjectivesPerWeek} objetivos/semana em média`}
-                </span>
-              </div>
-            </div>
-          </div>
+
+          {/* Week Selector */}
+          <ButtonGroup
+            title="Semana"
+            subtitle={availableWeeks.length > 0 ? `${availableWeeks.length} disponíveis` : undefined}
+            options={[
+              { value: 'all', label: 'Todas' },
+              ...availableWeeks.map(week => ({ value: week, label: week.toString() }))
+            ]}
+            selectedValue={selectedWeek}
+            onSelect={setSelectedWeek}
+            className="mb-6"
+          />
 
           {/* Filters */}
-          <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200 mb-8">
-            <div className="flex flex-col md:flex-row gap-4">
-              <div className="flex-1">
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                  <input
-                    type="text"
-                    placeholder="Buscar objetivos..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                  />
-                </div>
-              </div>
-              
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value as 'all' | 'completed' | 'pending')}
-                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-              >
-                <option value="all">Todos os Status</option>
-                <option value="completed">Concluídos</option>
-                <option value="pending">Pendentes</option>
-              </select>
+          <FilterBar
+            searchValue={searchTerm}
+            onSearchChange={setSearchTerm}
+            searchPlaceholder="Buscar objetivos..."
+            filters={[
+              {
+                label: "Status",
+                value: statusFilter,
+                options: [
+                  { value: 'completed', label: 'Concluídos' },
+                  { value: 'pending', label: 'Pendentes' }
+                ],
+                onChange: (value) => setStatusFilter(value as 'all' | 'completed' | 'pending')
+              },
+              {
+                label: "Categoria",
+                value: categoryFilter,
+                options: [
+                  { value: 'saude', label: 'Saúde' },
+                  { value: 'carreira', label: 'Carreira' },
+                  { value: 'financas', label: 'Finanças' },
+                  { value: 'relacionamentos', label: 'Relacionamentos' },
+                  { value: 'hobbies', label: 'Hobbies' },
+                  { value: 'outros', label: 'Outros' }
+                ],
+                onChange: setCategoryFilter
+              }
+            ]}
+            className="mb-6"
+          />
 
-              <select
-                value={categoryFilter}
-                onChange={(e) => setCategoryFilter(e.target.value)}
-                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-              >
-                <option value="all">Todas as Categorias</option>
-                <option value="saude">Saúde</option>
-                <option value="carreira">Carreira</option>
-                <option value="financas">Finanças</option>
-                <option value="relacionamentos">Relacionamentos</option>
-                <option value="hobbies">Hobbies</option>
-                <option value="outros">Outros</option>
-              </select>
-
-              <select
-                value={activePlanFilter}
-                onChange={(e) => setActivePlanFilter(e.target.value)}
-                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-              >
-                <option value="all">Todos os Planos</option>
-                {plans
-                  .filter(plan => plan.status === 'active' || (plan.weeks && plan.weeks.length > 0))
-                  .map(plan => (
-                    <option key={plan.id} value={plan.id}>
-                      {plan.title}
-                    </option>
-                  ))
-                }
-              </select>
-            </div>
-          </div>
-
-          {/* Goals List */}
-          {plansLoading ? (
-            <div className="text-center py-12">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto mb-4"></div>
-              <p className="text-gray-600">Carregando objetivos...</p>
-            </div>
+          {/* Goals List by Weeks */}
+          {goalsLoading ? (
+            <LoadingSpinner message="Carregando objetivos..." />
           ) : filteredGoals.length === 0 ? (
-            <div className="text-center py-12">
-              <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Target className="w-8 h-8 text-green-600" />
-              </div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                {allGoals.length === 0 ? 'Nenhum objetivo encontrado' : 'Nenhum objetivo corresponde aos filtros'}
-              </h3>
-              <p className="text-gray-600 mb-6">
-                {allGoals.length === 0 
+            <EmptyState
+              icon={Target}
+              title={allGoals.length === 0 ? 'Nenhum objetivo encontrado' : 'Nenhum objetivo corresponde aos filtros'}
+              description={allGoals.length === 0 
                   ? 'Comece criando seus primeiros objetivos para transformar seus sonhos em realidade!'
                   : 'Tente ajustar os filtros de busca para encontrar seus objetivos.'
                 }
-              </p>
-            </div>
+            />
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {filteredGoals.map((goal) => (
-                <div key={goal.id} className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-lg transition-shadow">
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="flex-1">
-                      <h3 className="text-lg font-bold text-gray-900 mb-2">{goal.title}</h3>
-                      <p className="text-sm text-gray-600 mb-3 line-clamp-2">{goal.description}</p>
+            <div className="space-y-8">
+              {/* Mostrar objetivos da semana selecionada ou todas as semanas */}
+              {selectedWeek === 'all' ? (
+                // Mostrar todas as semanas agrupadas
+                Object.entries(
+                  filteredGoals.reduce((acc, goal) => {
+                    const weekKey = `Semana ${goal.weekNumber}`;
+                    if (!acc[weekKey]) {
+                      acc[weekKey] = [];
+                    }
+                    acc[weekKey].push(goal);
+                    return acc;
+                  }, {} as Record<string, GoalWithPlanInfo[]>)
+                )
+                .sort(([a], [b]) => {
+                  const weekNumA = parseInt(a.replace('Semana ', ''));
+                  const weekNumB = parseInt(b.replace('Semana ', ''));
+                  return weekNumA - weekNumB;
+                })
+                .map(([weekLabel, weekGoals]) => (
+                  <div key={weekLabel} className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                    <div className="flex items-center justify-between mb-6">
+                      <h3 className="text-xl font-bold text-gray-900 flex items-center space-x-2">
+                        <div className="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center">
+                          <span className="text-sm font-bold text-purple-600">{weekGoals[0]?.weekNumber}</span>
+                        </div>
+                        <span>{weekLabel}</span>
+                      </h3>
+                      <div className="text-sm text-gray-500">
+                        {weekGoals.filter(g => g.completed).length} de {weekGoals.length} concluídos
+                      </div>
                     </div>
-                  </div>
 
-                  <div className="space-y-2 mb-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {weekGoals.map((goal) => {
+                        console.log('🔍 Renderizando objetivo individual:', {
+                          goal,
+                          id: goal.id,
+                          planId: goal.planId,
+                          weekId: goal.weekId,
+                          weekNumber: goal.weekNumber
+                        });
+                        return (
+                        <div 
+                          key={goal.id} 
+                          className={`border rounded-lg p-4 transition-all duration-200 hover:shadow-md ${
+                            goal.completed 
+                              ? 'bg-green-50 border-green-200' 
+                              : 'bg-white border-gray-200'
+                          }`}
+                        >
+                          <div className="flex items-start space-x-3">
+                            {/* Checkbox */}
+                            <button
+                              onClick={() => toggleGoalCompletion(goal)}
+                              disabled={updatingGoal === goal.id}
+                              className={`mt-1 w-5 h-5 rounded border-2 flex items-center justify-center transition-all duration-200 ${
+                                goal.completed
+                                  ? 'bg-green-500 border-green-500 text-white'
+                                  : 'border-gray-300 hover:border-green-400'
+                              } ${updatingGoal === goal.id ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                            >
+                              {updatingGoal === goal.id ? (
+                                <div className="w-3 h-3 border border-white border-t-transparent rounded-full animate-spin"></div>
+                              ) : goal.completed ? (
+                                <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                </svg>
+                              ) : null}
+                            </button>
+
+                            <div className="flex-1 min-w-0">
+                              <h4 className={`font-semibold text-sm mb-1 ${
+                                goal.completed ? 'text-green-800 line-through' : 'text-gray-900'
+                              }`}>
+                                {goal.title}
+                              </h4>
+                              
+                              {goal.description && (
+                                <p className={`text-xs mb-2 ${
+                                  goal.completed ? 'text-green-600' : 'text-gray-600'
+                                }`}>
+                                  {goal.description}
+                                </p>
+                              )}
+
                     <div className="flex items-center justify-between">
                       <span className={`px-2 py-1 rounded-full text-xs font-medium ${getCategoryColor(goal.category)}`}>
                         {getCategoryLabel(goal.category)}
                       </span>
+                                
+                                {goal.tasks && goal.tasks.length > 0 && (
                       <span className="text-xs text-gray-500">
-                        Semana {goal.weekNumber}
+                                    {goal.tasks.filter(t => t.completed).length}/{goal.tasks.length} tarefas
                       </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                        );
+                      })}
                     </div>
-                    
-                    <div className="text-sm text-gray-600">
-                      <p><strong>Plano:</strong> {goal.planTitle}</p>
+                  </div>
+                ))
+              ) : (
+                // Mostrar apenas a semana selecionada
+                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-semibold text-gray-900">
+                      Semana {selectedWeek}
+                    </h3>
+                    <div className="text-xs text-gray-500">
+                      {filteredGoals.filter(g => g.completed).length}/{filteredGoals.length} concluídos
                     </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {filteredGoals.map((goal) => (
+                      <div 
+                        key={goal.id} 
+                        className={`border rounded-md p-3 transition-all duration-200 hover:shadow-sm ${
+                          goal.completed 
+                            ? 'bg-green-50 border-green-200' 
+                            : 'bg-white border-gray-200'
+                        }`}
+                      >
+                        <div className="flex items-start space-x-2">
+                          {/* Checkbox */}
+                          <button
+                            onClick={() => toggleGoalCompletion(goal)}
+                            disabled={updatingGoal === goal.id}
+                            className={`mt-0.5 w-4 h-4 rounded border-2 flex items-center justify-center transition-all duration-200 ${
+                              goal.completed
+                                ? 'bg-green-500 border-green-500 text-white'
+                                : 'border-gray-300 hover:border-green-400'
+                            } ${updatingGoal === goal.id ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                          >
+                            {updatingGoal === goal.id ? (
+                              <div className="w-2 h-2 border border-white border-t-transparent rounded-full animate-spin"></div>
+                            ) : goal.completed ? (
+                              <svg className="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 20 20">
+                                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                              </svg>
+                            ) : null}
+                          </button>
+
+                          <div className="flex-1 min-w-0">
+                            <h4 className={`font-medium text-sm mb-1 ${
+                              goal.completed ? 'text-green-800 line-through' : 'text-gray-900'
+                            }`}>
+                              {goal.title}
+                            </h4>
+                            
+                            <div className="flex items-center justify-between">
+                              <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getCategoryColor(goal.category)}`}>
+                                {getCategoryLabel(goal.category)}
+                              </span>
 
                     {goal.tasks && goal.tasks.length > 0 && (
-                      <div className="text-sm text-gray-600">
-                        <p><strong>Tarefas:</strong> {goal.tasks.filter(t => t.completed).length}/{goal.tasks.length} concluídas</p>
+                                <span className="text-xs text-gray-500">
+                                  {goal.tasks.filter(t => t.completed).length}/{goal.tasks.length}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
                       </div>
-                    )}
-                  </div>
-
-                  <div className="flex items-center justify-between pt-4 border-t border-gray-200">
-                    <span className={`text-sm font-medium ${
-                      goal.completed ? 'text-green-600' : 'text-gray-500'
-                    }`}>
-                      {goal.completed ? 'Concluído' : 'Pendente'}
-                    </span>
+                    ))}
                   </div>
                 </div>
-              ))}
+              )}
             </div>
           )}
 
@@ -432,7 +1005,6 @@ export default function ObjectivesPage() {
             </div>
           )}
         </main>
-      </div>
     </div>
   );
 }

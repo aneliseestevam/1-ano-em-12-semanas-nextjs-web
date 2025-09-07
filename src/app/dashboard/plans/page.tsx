@@ -7,7 +7,8 @@ import { Plus, Edit, Trash2, Eye, Calendar, Target, CheckCircle, Clock } from 'l
 // import { TwelveWeekPlan } from '../../../types/dashboard';
 import { dashboardService } from '../../../services/dashboardService';
 import { usePlansManager } from '../../../hooks/usePlansManager';
-import DashboardNav from '../../../components/dashboard/DashboardNav';
+import { planService } from '../../../services/planService';
+import { PageHeader, StatCard, FilterBar, LoadingSpinner, EmptyState } from '../../../components/ui';
 
 export default function PlansPage() {
   const { isAuthenticated, loading: authLoading } = useAuth();
@@ -15,6 +16,8 @@ export default function PlansPage() {
   const { plans, loading: plansLoading, loadPlans, activatePlan } = usePlansManager();
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [plansWithStats, setPlansWithStats] = useState<any[]>([]);
+  const [statsLoading, setStatsLoading] = useState(false);
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
@@ -27,6 +30,127 @@ export default function PlansPage() {
       loadPlans();
     }
   }, [isAuthenticated]);
+
+  // Carregar estatísticas dos planos
+  const loadPlansStats = async () => {
+    if (!plans || plans.length === 0) return;
+    
+    setStatsLoading(true);
+    try {
+      console.log('🔄 Carregando estatísticas dos planos...');
+      
+      // Primeiro, tentar carregar planos com detalhes completos
+      const plansWithDetailsResult = await planService.getPlansWithDetails();
+      
+      if (plansWithDetailsResult.success && plansWithDetailsResult.data) {
+        console.log('✅ Planos com detalhes carregados:', plansWithDetailsResult.data.length);
+        
+        // Calcular estatísticas baseado nos dados completos
+        const updatedPlans = plansWithDetailsResult.data.map(plan => calculatePlanStats(plan));
+        setPlansWithStats(updatedPlans);
+        
+        console.log('✅ Estatísticas calculadas:', updatedPlans.map(p => ({
+          title: p.title,
+          totalGoals: p.totalGoals,
+          completedGoals: p.completedGoals,
+          completionRate: p.completionRate
+        })));
+      } else {
+        console.log('⚠️ Não foi possível carregar planos com detalhes, tentando API de estatísticas...');
+        
+        // Fallback: tentar usar o serviço de estatísticas
+        const statsResult = await planService.getAllPlansStats();
+        
+        if (statsResult.success && statsResult.data) {
+          console.log('✅ Estatísticas carregadas da API:', statsResult.data);
+          
+          const statsData = statsResult.data;
+          const updatedPlans = plans.map(plan => {
+            const planStats = statsData.plans?.find((p: any) => p.planId === plan.id) || 
+                             statsData.summary?.plans?.find((p: any) => p.id === plan.id);
+            
+            if (planStats) {
+              return {
+                ...plan,
+                totalGoals: planStats.totalGoals || 0,
+                completedGoals: planStats.completedGoals || 0,
+                completionRate: planStats.completionRate || 0,
+                totalTasks: planStats.totalTasks || 0,
+                completedTasks: planStats.completedTasks || 0
+              };
+            }
+            
+            return calculatePlanStats(plan);
+          });
+          
+          setPlansWithStats(updatedPlans);
+        } else {
+          console.log('⚠️ API de estatísticas não disponível, usando dados básicos...');
+          // Último fallback: usar dados básicos dos planos
+          const updatedPlans = plans.map(plan => calculatePlanStats(plan));
+          setPlansWithStats(updatedPlans);
+        }
+      }
+    } catch (error) {
+      console.error('❌ Erro ao carregar estatísticas:', error);
+      // Fallback final: usar dados básicos
+      const updatedPlans = plans.map(plan => calculatePlanStats(plan));
+      setPlansWithStats(updatedPlans);
+    } finally {
+      setStatsLoading(false);
+    }
+  };
+
+  // Função para calcular estatísticas de um plano individual
+  const calculatePlanStats = (plan: any) => {
+    let totalGoals = 0;
+    let completedGoals = 0;
+    let totalTasks = 0;
+    let completedTasks = 0;
+
+    // Se o plano tem semanas com objetivos, calcular baseado neles
+    if (plan.weeks && plan.weeks.length > 0) {
+      plan.weeks.forEach((week: any) => {
+        if (week.goals && week.goals.length > 0) {
+          week.goals.forEach((goal: any) => {
+            totalGoals++;
+            if (goal.completed) completedGoals++;
+            
+            if (goal.tasks && goal.tasks.length > 0) {
+              goal.tasks.forEach((task: any) => {
+                totalTasks++;
+                if (task.completed) completedTasks++;
+              });
+            }
+          });
+        }
+      });
+    } else {
+      // Usar dados básicos do plano se disponíveis
+      totalGoals = plan.totalGoals || 0;
+      completedGoals = plan.completedGoals || 0;
+      totalTasks = plan.totalTasks || 0;
+      completedTasks = plan.completedTasks || 0;
+    }
+
+    const completionRate = totalGoals > 0 ? Math.round((completedGoals / totalGoals) * 100) : 0;
+
+    return {
+      ...plan,
+      totalGoals,
+      completedGoals,
+      totalTasks,
+      completedTasks,
+      completionRate
+    };
+  };
+
+  // Carregar estatísticas quando os planos mudarem
+  useEffect(() => {
+    if (plans && plans.length > 0) {
+      loadPlansStats();
+    }
+  }, [plans]);
 
 
 
@@ -59,7 +183,7 @@ export default function PlansPage() {
 
   const handleStatusChange = async (planId: string, newStatus: 'active' | 'completed' | 'archived') => {
     try {
-      const plan = plans.find(p => p.id === planId);
+      const plan = plansWithStats.find(p => p.id === planId) || plans.find(p => p.id === planId);
       if (!plan) return;
 
       // Se estiver ativando o plano, usar o endpoint específico
@@ -109,28 +233,8 @@ export default function PlansPage() {
   }
 
   return (
-    <div className="flex min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100">
-      <DashboardNav currentPage="plans" />
-      <div className="flex-1 lg:ml-64">
-        <header className="bg-white shadow-sm border-b border-gray-200">
-          <div className="px-4 sm:px-6 lg:px-8">
-            <div className="flex justify-between items-center py-4">
-              <div className="flex items-center space-x-2">
-                <div className="w-8 h-8 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-lg flex items-center justify-center">
-                  <Target className="w-5 h-5 text-white" />
-                </div>
-                <span className="text-xl font-bold text-gray-900">Meus Planos</span>
-              </div>
-              <button
-                onClick={handleCreatePlan}
-                className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-4 py-2 rounded-lg font-semibold hover:from-indigo-700 hover:to-purple-700 transition-all duration-300 flex items-center space-x-2"
-              >
-                <Plus className="w-4 h-4" />
-                <span>Novo Plano</span>
-              </button>
-            </div>
-          </div>
-        </header>
+    <div>
+        <PageHeader title="Meus Planos" icon={Target} iconColor="from-indigo-600 to-purple-600" />
 
         <main className="px-4 sm:px-6 lg:px-8 py-8">
           {/* Success Message */}
@@ -153,7 +257,7 @@ export default function PlansPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-gray-600">Total de Planos</p>
-                  <p className="text-2xl font-bold text-gray-900">{plans.length}</p>
+                  <p className="text-2xl font-bold text-gray-900">{plansWithStats.length || plans.length}</p>
                 </div>
                 <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
                   <Target className="w-6 h-6 text-blue-600" />
@@ -166,7 +270,7 @@ export default function PlansPage() {
                 <div>
                   <p className="text-sm font-medium text-gray-600">Planos Ativos</p>
                   <p className="text-2xl font-bold text-gray-900">
-                    {plans.filter(p => p.status === 'active').length}
+                    {(plansWithStats.length > 0 ? plansWithStats : plans).filter(p => p.status === 'active').length}
                   </p>
                 </div>
                 <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
@@ -180,7 +284,7 @@ export default function PlansPage() {
                 <div>
                   <p className="text-sm font-medium text-gray-600">Concluídos</p>
                   <p className="text-2xl font-bold text-gray-900">
-                    {plans.filter(p => p.status === 'completed').length}
+                    {(plansWithStats.length > 0 ? plansWithStats : plans).filter(p => p.status === 'completed').length}
                   </p>
                 </div>
                 <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
@@ -194,7 +298,7 @@ export default function PlansPage() {
                 <div>
                   <p className="text-sm font-medium text-gray-600">Arquivados</p>
                   <p className="text-2xl font-bold text-gray-900">
-                    {plans.filter(p => p.status === 'archived').length}
+                    {(plansWithStats.length > 0 ? plansWithStats : plans).filter(p => p.status === 'archived').length}
                   </p>
                 </div>
                 <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center">
@@ -205,12 +309,14 @@ export default function PlansPage() {
           </div>
 
           {/* Plans List */}
-          {plansLoading ? (
+          {plansLoading || statsLoading ? (
             <div className="text-center py-12">
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto mb-4"></div>
-              <p className="text-gray-600">Carregando planos...</p>
+              <p className="text-gray-600">
+                {plansLoading ? 'Carregando planos...' : 'Calculando estatísticas...'}
+              </p>
             </div>
-          ) : plans.length === 0 ? (
+          ) : (plansWithStats.length || plans.length) === 0 ? (
             <div className="text-center py-12">
               <div className="w-16 h-16 bg-indigo-100 rounded-full flex items-center justify-center mx-auto mb-4">
                 <Target className="w-8 h-8 text-indigo-600" />
@@ -231,7 +337,7 @@ export default function PlansPage() {
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {plans.map((plan) => (
+              {(plansWithStats.length > 0 ? plansWithStats : plans).map((plan) => (
                 <div key={plan.id} className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-lg transition-shadow">
                   <div className="flex items-start justify-between mb-4">
                     <div className="flex-1">
@@ -316,7 +422,6 @@ export default function PlansPage() {
             </div>
           )}
         </main>
-      </div>
     </div>
   );
 }

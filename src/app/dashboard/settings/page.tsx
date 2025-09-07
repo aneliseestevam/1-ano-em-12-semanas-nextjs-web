@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../../../hooks/useAuth';
 import { useRouter } from 'next/navigation';
 import { Settings, User, Lock, Bell, Palette, Save, Eye, EyeOff } from 'lucide-react';
-import DashboardNav from '../../../components/dashboard/DashboardNav';
+import { PageHeader, LoadingSpinner } from '../../../components/ui';
 
 export default function SettingsPage() {
   const { user, isAuthenticated, loading: authLoading, updateProfile, changePassword } = useAuth();
@@ -127,21 +127,8 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="flex min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100">
-      <DashboardNav currentPage="settings" />
-      <div className="flex-1 lg:ml-64">
-        <header className="bg-white shadow-sm border-b border-gray-200">
-          <div className="px-4 sm:px-6 lg:px-8">
-            <div className="flex justify-between items-center py-4">
-              <div className="flex items-center space-x-2">
-                <div className="w-8 h-8 bg-gradient-to-br from-gray-600 to-gray-700 rounded-lg flex items-center justify-center">
-                  <Settings className="w-5 h-5 text-white" />
-                </div>
-                <h1 className="text-2xl font-bold text-gray-900">Configurações</h1>
-              </div>
-            </div>
-          </div>
-        </header>
+    <div>
+        <PageHeader title="Configurações" icon={Settings} iconColor="from-gray-600 to-gray-700" />
 
         <main className="px-4 sm:px-6 lg:px-8 py-8">
           {/* Success/Error Messages */}
@@ -370,7 +357,6 @@ export default function SettingsPage() {
             </div>
           </div>
         </main>
-      </div>
     </div>
   );
 }

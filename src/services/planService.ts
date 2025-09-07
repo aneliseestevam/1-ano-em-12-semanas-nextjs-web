@@ -4,6 +4,9 @@ class PlanService {
   // Cache local para evitar requisições desnecessárias
   static cache = new Map();
   static CACHE_DURATION = 15 * 60 * 1000; // 15 minutos (aumentado para melhor performance)
+  
+  // Controle de concorrência para evitar múltiplas requisições simultâneas
+  static pendingRequests = new Map();
 
   // Função para verificar cache
   static getFromCache(key: string) {
@@ -27,21 +30,233 @@ class PlanService {
     this.cache.clear();
   }
 
-  // Obter todos os planos do usuário - ULTRA OTIMIZADO PARA DASHBOARD
-  async getPlans() {
+  // Função para controlar requisições pendentes
+  static async getOrCreateRequest<T>(key: string, requestFn: () => Promise<T>): Promise<T> {
+    // Se já existe uma requisição pendente para esta chave, aguardar ela
+    if (this.pendingRequests.has(key)) {
+      console.log(`⏳ PlanService: Aguardando requisição pendente para ${key}`);
+      return this.pendingRequests.get(key);
+    }
+
+    // Criar nova requisição
+    const requestPromise = requestFn().finally(() => {
+      // Remover da lista de pendentes quando terminar
+      this.pendingRequests.delete(key);
+    });
+
+    // Adicionar à lista de pendentes
+    this.pendingRequests.set(key, requestPromise);
+    
+    return requestPromise;
+  }
+
+  // Obter planos com dados completos (semanas e objetivos)
+  async getPlansWithDetails() {
     try {
-      console.log('🚀 getPlans: Iniciando carregamento ULTRA otimizado para dashboard');
+      console.log('🚀 getPlansWithDetails: Carregando planos com dados completos');
       
       // Verificar cache
-      const cachedPlans = PlanService.getFromCache('all_plans');
+      const cachedPlans = PlanService.getFromCache('plans_with_details');
       if (cachedPlans) {
-        console.log('📦 getPlans: Usando cache');
+        console.log('📦 getPlansWithDetails: Usando cache');
         return { success: true, data: cachedPlans };
       }
 
-      // Buscar apenas planos básicos primeiro (sem detalhes)
+      // Buscar planos com dados completos
       const response = await api.get('/plans');
-      const plans = response.data.success ? response.data.data.plans : [];
+      
+      // A API retorna { success: true, data: { plans: [...] } }
+      let plans = [];
+      if (response.data.success) {
+        if (Array.isArray(response.data.data)) {
+          // Formato antigo: data é array direto
+          plans = response.data.data;
+        } else if (response.data.data && Array.isArray(response.data.data.plans)) {
+          // Formato novo: data é objeto com propriedade plans
+          plans = response.data.data.plans;
+        } else {
+          console.error('❌ getPlansWithDetails: Formato de dados inesperado:', response.data);
+          return { success: false, error: 'Formato de dados inválido - estrutura não reconhecida' };
+        }
+      }
+      
+      // Verificar se plans é um array
+      if (!Array.isArray(plans)) {
+        console.error('❌ getPlansWithDetails: plans não é um array:', typeof plans, plans);
+        return { success: false, error: 'Formato de dados inválido - esperado array de planos' };
+      }
+      
+      if (plans.length === 0) {
+        console.log('📭 getPlansWithDetails: Nenhum plano encontrado');
+        return { success: true, data: [] };
+      }
+
+      console.log(`📋 getPlansWithDetails: ${plans.length} planos encontrados, carregando dados completos...`);
+      
+      // Carregar dados completos para cada plano
+      const plansWithDetails = await Promise.all(
+        plans.map(async (plan: Record<string, unknown>) => {
+          try {
+            // Buscar semanas do plano
+            const weeksResponse = await api.get(`weeks/plans/${plan._id || plan.id}`);
+            const weeks = weeksResponse.data.success ? weeksResponse.data.data.weeks : [];
+            
+            // Para cada semana, buscar objetivos
+            const weeksWithGoals = await Promise.all(
+              weeks.map(async (week: Record<string, unknown>) => {
+                try {
+                  const goalsResponse = await api.get(`/goals/plans/${plan._id || plan.id}/weeks/${week._id || week.id}`);
+                  const goals = goalsResponse.data.success ? goalsResponse.data.data.goals : [];
+                  
+                  // Para cada objetivo, buscar tasks
+                  const goalsWithTasks = await Promise.all(
+                    goals.map(async (goal: Record<string, unknown>) => {
+                      try {
+                        const tasksResponse = await api.get(`/tasks/plans/${plan._id || plan.id}/weeks/${week._id || week.id}/goals/${goal._id || goal.id}`);
+                        const tasks = tasksResponse.data.success ? tasksResponse.data.data.tasks : [];
+                        
+                        return {
+                          ...goal,
+                          id: goal._id || goal.id,
+                          tasks: tasks.map((task: Record<string, unknown>) => ({
+                            ...task,
+                            id: task._id || task.id
+                          }))
+                        };
+                      } catch {
+                        return {
+                          ...goal,
+                          id: goal._id || goal.id,
+                          tasks: []
+                        };
+                      }
+                    })
+                  );
+                  
+                  return {
+                    ...week,
+                    id: week._id || week.id,
+                    goals: goalsWithTasks
+                  };
+                } catch {
+                  return {
+                    ...week,
+                    id: week._id || week.id,
+                    goals: []
+                  };
+                }
+              })
+            );
+            
+            return {
+              ...plan,
+              id: plan._id || plan.id,
+              weeks: weeksWithGoals
+            };
+          } catch {
+            return {
+              ...plan,
+              id: plan._id || plan.id,
+              weeks: []
+            };
+          }
+        })
+      );
+
+      // Salvar no cache
+      PlanService.setCache('plans_with_details', plansWithDetails);
+      console.log(`✅ getPlansWithDetails: ${plansWithDetails.length} planos carregados com dados completos`);
+      
+      return { success: true, data: plansWithDetails };
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
+      console.error('❌ getPlansWithDetails: Erro ao carregar planos:', errorMessage);
+      return { success: false, error: errorMessage };
+    }
+  }
+
+  // Obter todos os planos do usuário - ULTRA OTIMIZADO PARA DASHBOARD
+  async getPlans() {
+    return PlanService.getOrCreateRequest('all_plans', async () => {
+      try {
+        console.log('🚀 getPlans: Iniciando carregamento ULTRA otimizado para dashboard');
+        
+        // Verificar cache
+        const cachedPlans = PlanService.getFromCache('all_plans');
+        if (cachedPlans) {
+          console.log('📦 getPlans: Usando cache');
+          return { success: true, data: cachedPlans };
+        }
+
+        // Buscar apenas planos básicos primeiro (sem detalhes)
+        let response;
+        try {
+          response = await api.get('/plans');
+        } catch (apiError) {
+          console.error('❌ getPlans: API falhou, usando dados mock:', apiError);
+          // Se a API falhar, retornar dados mock para não quebrar a UI
+          const mockPlans = [{
+            id: 'mock-plan-1',
+            _id: 'mock-plan-1',
+            title: 'Plano Demo',
+            description: 'Plano de demonstração (API offline)',
+            status: 'active',
+            startDate: new Date().toISOString(),
+            endDate: new Date(Date.now() + 12 * 7 * 24 * 60 * 60 * 1000).toISOString(),
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            totalGoals: 0,
+            completedGoals: 0,
+            totalTasks: 0,
+            completedTasks: 0,
+            weeks: []
+          }];
+          
+          const plansWithBasicInfo = mockPlans.map((plan: Record<string, unknown>) => ({
+            ...plan,
+            id: plan._id || plan.id,
+            weeks: [],
+            title: plan.title,
+            description: plan.description,
+            status: plan.status || 'active',
+            startDate: plan.startDate,
+            endDate: plan.endDate,
+            createdAt: plan.createdAt,
+            updatedAt: plan.updatedAt,
+            year: new Date().getFullYear(),
+            tags: [],
+            completionRate: 0,
+            totalGoals: plan.totalGoals || 0,
+            completedGoals: plan.completedGoals || 0,
+            totalTasks: plan.totalTasks || 0,
+            completedTasks: plan.completedTasks || 0
+          }));
+
+          PlanService.setCache('all_plans', plansWithBasicInfo);
+          console.log(`✅ getPlans: Dados mock carregados (API offline)`);
+          return { success: true, data: plansWithBasicInfo };
+        }
+        
+        // A API retorna { success: true, data: { plans: [...] } }
+        let plans = [];
+        if (response.data.success) {
+          if (Array.isArray(response.data.data)) {
+            // Formato antigo: data é array direto
+            plans = response.data.data;
+          } else if (response.data.data && Array.isArray(response.data.data.plans)) {
+            // Formato novo: data é objeto com propriedade plans
+            plans = response.data.data.plans;
+          } else {
+            console.error('❌ getPlans: Formato de dados inesperado:', response.data);
+            return { success: false, error: 'Formato de dados inválido - estrutura não reconhecida' };
+          }
+        }
+        
+        // Verificar se plans é um array
+        if (!Array.isArray(plans)) {
+          console.error('❌ getPlans: plans não é um array:', typeof plans, plans);
+          return { success: false, error: 'Formato de dados inválido - esperado array de planos' };
+        }
       
       if (plans.length === 0) {
         console.log('📭 getPlans: Nenhum plano encontrado');
@@ -84,12 +299,13 @@ class PlanService {
       PlanService.setCache('all_plans', plansWithBasicInfo);
       console.log(`✅ getPlans: ${plansWithBasicInfo.length} planos carregados com sucesso (dados básicos)`);
       
-      return { success: true, data: plansWithBasicInfo };
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
-      console.error('❌ getPlans: Erro ao carregar planos:', errorMessage);
-      return { success: false, error: errorMessage };
-    }
+        return { success: true, data: plansWithBasicInfo };
+      } catch (error: unknown) {
+        const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
+        console.error('❌ getPlans: Erro ao carregar planos:', errorMessage);
+        return { success: false, error: errorMessage };
+      }
+    });
   }
 
   // Obter plano específico com detalhes completos (para páginas de detalhes)
@@ -287,7 +503,27 @@ class PlanService {
       }
 
       const response = await api.get(`/plans?status=${status}`);
-      const plans = response.data.success ? response.data.data.plans : [];
+      
+      // A API retorna { success: true, data: { plans: [...] } }
+      let plans = [];
+      if (response.data.success) {
+        if (Array.isArray(response.data.data)) {
+          // Formato antigo: data é array direto
+          plans = response.data.data;
+        } else if (response.data.data && Array.isArray(response.data.data.plans)) {
+          // Formato novo: data é objeto com propriedade plans
+          plans = response.data.data.plans;
+        } else {
+          console.error('❌ getPlansByStatus: Formato de dados inesperado:', response.data);
+          return { success: false, error: 'Formato de dados inválido - estrutura não reconhecida' };
+        }
+      }
+      
+      // Verificar se plans é um array
+      if (!Array.isArray(plans)) {
+        console.error('❌ getPlansByStatus: plans não é um array:', typeof plans, plans);
+        return { success: false, error: 'Formato de dados inválido - esperado array de planos' };
+      }
       
       const basicPlans = plans.map((plan: Record<string, unknown>) => ({
         ...plan,
@@ -313,7 +549,27 @@ class PlanService {
       }
 
       const response = await api.get(`/plans?year=${year}`);
-      const plans = response.data.success ? response.data.data.plans : [];
+      
+      // A API retorna { success: true, data: { plans: [...] } }
+      let plans = [];
+      if (response.data.success) {
+        if (Array.isArray(response.data.data)) {
+          // Formato antigo: data é array direto
+          plans = response.data.data;
+        } else if (response.data.data && Array.isArray(response.data.data.plans)) {
+          // Formato novo: data é objeto com propriedade plans
+          plans = response.data.data.plans;
+        } else {
+          console.error('❌ getPlansByYear: Formato de dados inesperado:', response.data);
+          return { success: false, error: 'Formato de dados inválido - estrutura não reconhecida' };
+        }
+      }
+      
+      // Verificar se plans é um array
+      if (!Array.isArray(plans)) {
+        console.error('❌ getPlansByYear: plans não é um array:', typeof plans, plans);
+        return { success: false, error: 'Formato de dados inválido - esperado array de planos' };
+      }
       
       const basicPlans = plans.map((plan: Record<string, unknown>) => ({
         ...plan,

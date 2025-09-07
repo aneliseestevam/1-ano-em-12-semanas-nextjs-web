@@ -120,6 +120,7 @@ export const usePlansManager = () => {
     
     // Evitar múltiplas requisições simultâneas
     if (isLoadingRef.current && !forceRefresh) {
+      console.log('⏳ usePlansManager: Requisição já em andamento, aguardando...');
       return;
     }
 
@@ -127,13 +128,15 @@ export const usePlansManager = () => {
     const now = Date.now();
     const cachedData = plansCache.get('plans');
     if (!forceRefresh && cachedData && (now - cachedData.timestamp) < CACHE_DURATION) {
+      console.log('📦 usePlansManager: Usando cache local');
       setPlans(cachedData.data);
       setLoading(false);
       return;
     }
 
-    // Verificar se já carregou recentemente
-    if (!forceRefresh && (now - lastLoadTime.current) < 200) {
+    // Debounce: Verificar se já carregou recentemente (aumentado para 1 segundo)
+    if (!forceRefresh && (now - lastLoadTime.current) < 1000) {
+      console.log('⏳ usePlansManager: Debounce ativo, aguardando...');
       return;
     }
 

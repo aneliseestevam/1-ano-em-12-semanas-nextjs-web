@@ -2,7 +2,8 @@
 
 import React, { useState } from 'react';
 import { useAuth } from '../../hooks/useAuth';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
+import Link from 'next/link';
 import { 
   Target, 
   Calendar, 
@@ -15,13 +16,10 @@ import {
   Folder
 } from 'lucide-react';
 
-interface DashboardNavProps {
-  currentPage: string;
-}
-
-const DashboardNav: React.FC<DashboardNavProps> = ({ currentPage }) => {
+const DashboardNav: React.FC = () => {
   const { user, logout } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const handleLogout = async () => {
@@ -30,12 +28,12 @@ const DashboardNav: React.FC<DashboardNavProps> = ({ currentPage }) => {
   };
 
   const navigation = [
-    { name: 'Dashboard', href: '/dashboard', icon: Target, current: currentPage === 'dashboard' },
-    { name: 'Planos', href: '/dashboard/plans', icon: Folder, current: currentPage === 'plans' },
-    { name: 'Objetivos', href: '/dashboard/objectives', icon: Target, current: currentPage === 'objectives' },
-    { name: 'Planejamento Semanal', href: '/dashboard/weekly', icon: Calendar, current: currentPage === 'weekly' },
-    { name: 'Relatórios', href: '/dashboard/reports', icon: BarChart3, current: currentPage === 'reports' },
-    { name: 'Configurações', href: '/dashboard/settings', icon: Settings, current: currentPage === 'settings' },
+    { name: 'Dashboard', href: '/dashboard', icon: Target, current: pathname === '/dashboard' },
+    { name: 'Planos', href: '/dashboard/plans', icon: Folder, current: pathname === '/dashboard/plans' },
+    { name: 'Objetivos', href: '/dashboard/objectives', icon: Target, current: pathname === '/dashboard/objectives' },
+    { name: 'Planejamento Semanal', href: '/dashboard/weekly', icon: Calendar, current: pathname === '/dashboard/weekly' },
+    { name: 'Relatórios', href: '/dashboard/reports', icon: BarChart3, current: pathname === '/dashboard/reports' },
+    { name: 'Configurações', href: '/dashboard/settings', icon: Settings, current: pathname === '/dashboard/settings' },
   ];
 
   return (
@@ -69,7 +67,7 @@ const DashboardNav: React.FC<DashboardNavProps> = ({ currentPage }) => {
             {navigation.map((item) => {
               const Icon = item.icon;
               return (
-                <a
+                <Link
                   key={item.name}
                   href={item.href}
                   className={`group flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
@@ -82,7 +80,7 @@ const DashboardNav: React.FC<DashboardNavProps> = ({ currentPage }) => {
                     item.current ? 'text-indigo-500' : 'text-gray-400 group-hover:text-gray-500'
                   }`} />
                   {item.name}
-                </a>
+                </Link>
               );
             })}
           </nav>
@@ -146,7 +144,7 @@ const DashboardNav: React.FC<DashboardNavProps> = ({ currentPage }) => {
                 {navigation.map((item) => {
                   const Icon = item.icon;
                   return (
-                    <a
+                    <Link
                       key={item.name}
                       href={item.href}
                       onClick={() => setMobileMenuOpen(false)}
@@ -160,7 +158,7 @@ const DashboardNav: React.FC<DashboardNavProps> = ({ currentPage }) => {
                         item.current ? 'text-indigo-500' : 'text-gray-400 group-hover:text-gray-500'
                       }`} />
                       {item.name}
-                    </a>
+                    </Link>
                   );
                 })}
               </nav>

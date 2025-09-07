@@ -3,7 +3,6 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { useAuth } from '../../hooks/useAuth';
 import { useRouter } from 'next/navigation';
-import DashboardNav from '../../components/dashboard/DashboardNav';
 import { 
   Plus, 
   Calendar, 
@@ -16,6 +15,7 @@ import {
 } from 'lucide-react';
 import { DashboardStats } from '../../types/dashboard';
 import { usePlansManager } from '../../hooks/usePlansManager';
+import { PageHeader, ProgressCard, StatCard, LoadingSpinner, EmptyState } from '../../components/ui';
 
 export default function Dashboard() {
   const { isAuthenticated, loading: authLoading } = useAuth();
@@ -297,23 +297,13 @@ export default function Dashboard() {
 
   if (authLoading || loading || statsLoading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100">
-        <DashboardNav currentPage="dashboard" />
-        <div className="lg:ml-64 p-6">
-          <div className="flex items-center justify-center min-h-[60vh]">
-            <div className="text-center">
-              <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-indigo-600 mx-auto mb-6"></div>
-              <h2 className="text-xl font-semibold text-gray-700 mb-2">
-                {authLoading ? 'Verificando autenticação...' : 
-                 loading ? 'Carregando planos...' : 
-                 'Carregando estatísticas...'}
-              </h2>
-              <p className="text-gray-500">
-                Preparando seu dashboard com os dados mais recentes
-              </p>
-            </div>
-          </div>
-        </div>
+      <div className="p-6">
+        <LoadingSpinner 
+          message={authLoading ? 'Verificando autenticação...' :
+                   loading ? 'Carregando planos...' :
+                   'Carregando estatísticas...'}
+          size="lg"
+        />
       </div>
     );
   }
@@ -323,30 +313,13 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <DashboardNav currentPage="dashboard" />
-      
-      <div className="lg:ml-64">
-        {/* Header */}
-        <header className="sticky top-0 z-30 bg-white shadow-sm border-b">
-          <div className="px-6 py-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-                <p className="text-gray-600">Visão geral dos seus planos e progresso</p>
-              </div>
-              <div className="flex items-center space-x-3">
-                <button
-                  onClick={() => router.push('/dashboard/plans')}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2"
-                >
-                  <Plus className="w-4 h-4" />
-                  <span>Novo Plano</span>
-                </button>
-              </div>
-            </div>
-          </div>
-        </header>
+    <div>
+        <PageHeader 
+          title="Dashboard" 
+          icon={BarChart3} 
+          iconColor="from-blue-600 to-indigo-600"
+          subtitle="Visão geral dos seus planos e progresso"
+        />
 
         {/* Main Content */}
         <div className="p-6">
@@ -370,19 +343,15 @@ export default function Dashboard() {
             if (!activePlan) {
               return (
                 <div className="bg-white rounded-xl shadow-sm border p-8 mb-8">
-                  <div className="text-center">
-                    <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                      <Folder className="w-8 h-8 text-gray-400" />
-                    </div>
-                    <h3 className="text-lg font-semibold text-gray-900 mb-2">Nenhum plano ativo</h3>
-                    <p className="text-gray-600 mb-6">Crie seu primeiro plano para começar sua jornada de 12 semanas</p>
-                    <button
-                      onClick={() => router.push('/dashboard/plans')}
-                      className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
-                    >
-                      Criar Primeiro Plano
-                    </button>
-                  </div>
+                  <EmptyState
+                    icon={Folder}
+                    title="Nenhum plano ativo"
+                    description="Crie seu primeiro plano para começar sua jornada de 12 semanas"
+                    action={{
+                      label: "Criar Primeiro Plano",
+                      onClick: () => router.push('/dashboard/plans')
+                    }}
+                  />
                 </div>
               );
             }
@@ -697,7 +666,6 @@ export default function Dashboard() {
             </div>
           )}
         </div>
-      </div>
     </div>
   );
 }
