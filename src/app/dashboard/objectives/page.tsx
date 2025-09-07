@@ -576,9 +576,29 @@ export default function ObjectivesPage() {
       if (result.success) {
         console.log('✅ Objetivo criado com sucesso:', result.data);
         
-        // Recarregar objetivos para incluir o novo
-        if (goalData.weekNumber === selectedWeek || selectedWeek === 'all') {
-          await loadAllGoalsFromAPI();
+        // Adicionar o novo objetivo ao estado local
+        const newGoal: GoalWithPlanInfo = {
+          id: result.data._id || result.data.id,
+          title: goalData.title,
+          description: goalData.description,
+          category: goalData.category as 'saude' | 'carreira' | 'financas' | 'relacionamentos' | 'hobbies' | 'outros',
+          priority: goalData.priority,
+          completed: goalData.completed,
+          targetDate: goalData.targetDate ? new Date(goalData.targetDate) : undefined,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          planId: goalData.planId,
+          planTitle: selectedPlanForGoal?.planTitle || '',
+          weekId: goalData.weekId,
+          weekNumber: goalData.weekNumber,
+          tasks: []
+        };
+        
+        setAllGoals(prevGoals => [...prevGoals, newGoal]);
+        
+        // Atualizar semanas disponíveis se necessário
+        if (!availableWeeks.includes(goalData.weekNumber)) {
+          setAvailableWeeks(prevWeeks => [...prevWeeks, goalData.weekNumber].sort((a, b) => a - b));
         }
         
         setShowGoalCreator(false);
@@ -613,8 +633,21 @@ export default function ObjectivesPage() {
       if (result.success) {
         console.log('✅ Objetivo atualizado com sucesso:', result.data);
         
-        // Recarregar objetivos para refletir as mudanças
-        await loadAllGoalsFromAPI();
+        // Atualizar o objetivo no estado local
+        setAllGoals(prevGoals => 
+          prevGoals.map(goal => 
+            goal.id === goalId 
+              ? {
+                  ...goal,
+                  title: goalData.title,
+                  description: goalData.description,
+                  category: goalData.category as 'saude' | 'carreira' | 'financas' | 'relacionamentos' | 'hobbies' | 'outros',
+                  priority: goalData.priority,
+                  targetDate: goalData.targetDate ? new Date(goalData.targetDate) : goal.targetDate
+                }
+              : goal
+          )
+        );
         
         setShowGoalEditor(false);
         setSelectedGoalForEdit(null);
@@ -641,8 +674,21 @@ export default function ObjectivesPage() {
       if (result.success) {
         console.log('✅ Objetivo excluído com sucesso');
         
-        // Recarregar objetivos para refletir as mudanças
-        await loadAllGoalsFromAPI();
+        // Remover o objetivo do estado local
+        setAllGoals(prevGoals => {
+          const updatedGoals = prevGoals.filter(goal => goal.id !== goalId);
+          
+          // Verificar se a semana ainda tem objetivos
+          const weekNumber = selectedGoalForEdit!.weekNumber;
+          const hasGoalsInWeek = updatedGoals.some(goal => goal.weekNumber === weekNumber);
+          
+          // Se não há mais objetivos na semana, remover da lista de semanas disponíveis
+          if (!hasGoalsInWeek && typeof weekNumber === 'number') {
+            setAvailableWeeks(prevWeeks => prevWeeks.filter(week => week !== weekNumber));
+          }
+          
+          return updatedGoals;
+        });
         
         setShowGoalEditor(false);
         setSelectedGoalForEdit(null);
