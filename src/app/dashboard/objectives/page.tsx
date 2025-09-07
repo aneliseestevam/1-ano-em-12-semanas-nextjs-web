@@ -741,8 +741,9 @@ export default function ObjectivesPage() {
     const activePlans = plans?.filter(plan => plan.status === 'active') || [];
     if (activePlans.length > 0) {
       const firstPlan = activePlans[0];
-      // Usar a primeira semana disponível ou semana 1 como padrão
-      const firstWeek = availableWeeks.length > 0 ? availableWeeks[0] : 1;
+      // Usar a semana selecionada no filtro ou a primeira semana disponível como padrão
+      const targetWeek = selectedWeek !== 'all' ? selectedWeek : (availableWeeks.length > 0 ? availableWeeks[0] : 1);
+      console.log('🎯 Criando objetivo para semana:', targetWeek, 'selectedWeek:', selectedWeek);
       
       try {
         // Tentar obter o weekId real do backend usando o endpoint correto
@@ -753,15 +754,15 @@ export default function ObjectivesPage() {
         
         if (weeksResponse.success && weeksResponse.data && weeksResponse.data.weeks && Array.isArray(weeksResponse.data.weeks)) {
           // Procurar pela semana correspondente
-          const week = weeksResponse.data.weeks.find((w: any) => w.weekNumber === firstWeek);
-          console.log('🔍 Semana encontrada:', week);
+          const week = weeksResponse.data.weeks.find((w: any) => w.weekNumber === targetWeek);
+          console.log('🔍 Semana encontrada:', week, 'para targetWeek:', targetWeek);
           
           if (week && week._id) {
             console.log('✅ Usando weekId real:', week._id);
             setSelectedPlanForGoal({
               planId: firstPlan.id,
               weekId: week._id,
-              weekNumber: firstWeek,
+              weekNumber: targetWeek,
               planTitle: firstPlan.title
             });
             setShowGoalCreator(true);
@@ -771,12 +772,12 @@ export default function ObjectivesPage() {
         
         // Se não encontrou a semana, tentar criar uma nova semana
         console.log('⚠️ Semana não encontrada, tentando criar nova semana...');
-        await handleCreateWeekAndGoal(firstPlan, firstWeek);
+        await handleCreateWeekAndGoal(firstPlan, targetWeek);
         
       } catch (error) {
         console.error('❌ Erro ao obter semanas do plano:', error);
         // Fallback: tentar criar semana
-        await handleCreateWeekAndGoal(firstPlan, firstWeek);
+        await handleCreateWeekAndGoal(firstPlan, targetWeek);
       }
     } else {
       console.warn('⚠️ Nenhum plano ativo encontrado para criar objetivo');
