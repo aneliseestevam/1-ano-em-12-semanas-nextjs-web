@@ -62,6 +62,7 @@ export default function PlansPage() {
   const [plansWithStats, setPlansWithStats] = useState<PlanWithStats[]>([]);
   const [statsLoading, setStatsLoading] = useState(false);
   const [showPlansManager, setShowPlansManager] = useState(false);
+  const [initialLoadComplete, setInitialLoadComplete] = useState(false);
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
@@ -75,41 +76,32 @@ export default function PlansPage() {
     }
   }, [isAuthenticated]);
 
-  // Carregar estatísticas dos planos
-  const loadPlansStats = async () => {
+  // Carregar estatísticas dos planos (otimizado)
+  const loadPlansStats = async (forceReload = false) => {
     if (!plans || plans.length === 0) return;
+    
+    // Se já carregou e não é reload forçado, usar cache
+    if (initialLoadComplete && !forceReload && plansWithStats.length > 0) {
+      console.log('📦 Usando cache de estatísticas');
+      return;
+    }
     
     setStatsLoading(true);
     try {
       console.log('🔄 Carregando estatísticas dos planos...');
       
-      // Primeiro, tentar carregar planos com detalhes completos
-      const plansWithDetailsResult = await planService.getPlansWithDetails();
+      // Estratégia otimizada: tentar apenas uma API por vez
+      let updatedPlans: PlanWithStats[] = [];
       
-      if (plansWithDetailsResult.success && plansWithDetailsResult.data) {
-        console.log('✅ Planos com detalhes carregados:', plansWithDetailsResult.data.length);
-        
-        // Calcular estatísticas baseado nos dados completos
-        const updatedPlans = plansWithDetailsResult.data.map((plan: any) => calculatePlanStats(plan));
-        setPlansWithStats(updatedPlans);
-        
-        console.log('✅ Estatísticas calculadas:', updatedPlans.map((p: any) => ({
-          title: p.title,
-          totalGoals: p.totalGoals,
-          completedGoals: p.completedGoals,
-          completionRate: p.completionRate
-        })));
-      } else {
-        console.log('⚠️ Não foi possível carregar planos com detalhes, tentando API de estatísticas...');
-        
-        // Fallback: tentar usar o serviço de estatísticas
+      // Primeiro, tentar API de estatísticas (mais rápida)
+      try {
         const statsResult = await planService.getAllPlansStats();
         
         if (statsResult.success && statsResult.data) {
-          console.log('✅ Estatísticas carregadas da API:', statsResult.data);
+          console.log('✅ Estatísticas carregadas da API (rápida)');
           
           const statsData = statsResult.data;
-          const updatedPlans = plans.map(plan => {
+          updatedPlans = plans.map(plan => {
             const planStats = statsData.plans?.find((p: PlanStats) => p.planId === plan.id) || 
                              statsData.summary?.plans?.find((p: PlanStats) => p.id === plan.id);
             
@@ -121,25 +113,47 @@ export default function PlansPage() {
                 completionRate: planStats.completionRate || 0,
                 totalTasks: planStats.totalTasks || 0,
                 completedTasks: planStats.completedTasks || 0
-              };
+              } as unknown as PlanWithStats;
             }
             
             return calculatePlanStats(plan as any);
           });
+        }
+      } catch {
+        console.log('⚠️ API de estatísticas falhou, tentando planos com detalhes...');
+      }
+      
+      // Se não conseguiu com API de estatísticas, tentar planos com detalhes
+      if (updatedPlans.length === 0) {
+        try {
+          const plansWithDetailsResult = await planService.getPlansWithDetails();
           
-          setPlansWithStats(updatedPlans as any);
-        } else {
-          console.log('⚠️ API de estatísticas não disponível, usando dados básicos...');
-          // Último fallback: usar dados básicos dos planos
-          const updatedPlans = plans.map(plan => calculatePlanStats(plan as any));
-          setPlansWithStats(updatedPlans as any);
+          if (plansWithDetailsResult.success && plansWithDetailsResult.data) {
+            console.log('✅ Planos com detalhes carregados');
+            updatedPlans = plansWithDetailsResult.data.map((plan: any) => calculatePlanStats(plan));
+          }
+        } catch {
+          console.log('⚠️ API de detalhes falhou, usando dados básicos...');
         }
       }
+      
+      // Fallback final: usar dados básicos
+      if (updatedPlans.length === 0) {
+        console.log('📊 Usando dados básicos dos planos');
+        updatedPlans = plans.map(plan => calculatePlanStats(plan as any));
+      }
+      
+      setPlansWithStats(updatedPlans);
+      setInitialLoadComplete(true);
+      
+      console.log('✅ Estatísticas carregadas:', updatedPlans.length, 'planos');
+      
     } catch (error) {
       console.error('❌ Erro ao carregar estatísticas:', error);
       // Fallback final: usar dados básicos
       const updatedPlans = plans.map(plan => calculatePlanStats(plan as any));
       setPlansWithStats(updatedPlans);
+      setInitialLoadComplete(true);
     } finally {
       setStatsLoading(false);
     }
@@ -189,12 +203,12 @@ export default function PlansPage() {
     };
   };
 
-  // Carregar estatísticas quando os planos mudarem
+  // Carregar estatísticas quando os planos mudarem (otimizado)
   useEffect(() => {
-    if (plans && plans.length > 0) {
+    if (plans && plans.length > 0 && !initialLoadComplete) {
       loadPlansStats();
     }
-  }, [plans]);
+  }, [plans, initialLoadComplete]);
 
 
 
@@ -227,8 +241,8 @@ export default function PlansPage() {
       if (result.success) {
         setSuccess('Plano criado com sucesso!');
         setShowPlansManager(false);
-        // Recarregar estatísticas
-        await loadPlansStats();
+        // Recarregar estatísticas (forçar reload)
+        await loadPlansStats(true);
       } else {
         setError(result.error || 'Erro ao criar plano');
       }
@@ -252,8 +266,8 @@ export default function PlansPage() {
         const result = await deletePlan(planId);
         if (result.success) {
           setSuccess('Plano excluído com sucesso!');
-          // Recarregar estatísticas
-          await loadPlansStats();
+          // Recarregar estatísticas (forçar reload)
+          await loadPlansStats(true);
         } else {
           setError(result.error || 'Erro ao excluir plano');
         }
@@ -304,6 +318,9 @@ export default function PlansPage() {
     router.push(`/dashboard/plans/${planId}`);
   };
 
+  // Loading state otimizado
+  const isLoading = authLoading || plansLoading || (statsLoading && !initialLoadComplete);
+  
   if (authLoading || plansLoading || !isAuthenticated) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 flex items-center justify-center">
@@ -317,7 +334,12 @@ export default function PlansPage() {
 
   return (
     <div>
-        <PageHeader title="Meus Planos" icon={Target} iconColor="from-indigo-600 to-purple-600" />
+        <PageHeader 
+          title="Meus Planos" 
+          icon={Target} 
+          iconColor="from-indigo-600 to-purple-600"
+          subtitle={statsLoading && initialLoadComplete ? "Atualizando estatísticas..." : undefined}
+        />
 
         <main className="px-4 sm:px-6 lg:px-8 py-8">
           {/* Botão de Criação de Planos */}
@@ -406,7 +428,7 @@ export default function PlansPage() {
           </div>
 
           {/* Plans List */}
-          {plansLoading || statsLoading ? (
+          {isLoading ? (
             <div className="text-center py-12">
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto mb-4"></div>
               <p className="text-gray-600">
