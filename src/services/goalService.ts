@@ -21,6 +21,16 @@ const goalService = {
     }
   },
 
+  // Listar semanas do plano
+  async getWeeks(planId: string) {
+    try {
+      const response = await api.get(`/goals/plans/${planId}/weeks`);
+      return response.data;
+    } catch (error: unknown) {
+      return { success: false, error: this.handleError(error) };
+    }
+  },
+
   // Criar novo objetivo
   async createGoal(planId: string, weekId: string, goalData: Record<string, unknown>) {
     try {

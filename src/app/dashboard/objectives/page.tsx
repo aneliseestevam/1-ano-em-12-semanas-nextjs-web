@@ -7,6 +7,7 @@ import { Target } from 'lucide-react';
 import { Goal } from '../../../types/dashboard';
 import { usePlansManager } from '../../../hooks/usePlansManager';
 import { PageHeader, ProgressCard, StatCard, FilterBar, ButtonGroup, LoadingSpinner, EmptyState } from '../../../components/ui';
+import GoalCreator from '../../../components/dashboard/GoalCreator';
 
 interface GoalWithPlanInfo extends Goal {
   planId: string;
@@ -35,6 +36,8 @@ export default function ObjectivesPage() {
   const [currentWeek, setCurrentWeek] = useState<number>(1);
   const [loadedWeeks, setLoadedWeeks] = useState<Set<number>>(new Set());
   const [apiOffline] = useState(false);
+  const [showGoalCreator, setShowGoalCreator] = useState(false);
+  const [selectedPlanForGoal, setSelectedPlanForGoal] = useState<{ planId: string; weekId: string; weekNumber: number; planTitle: string } | null>(null);
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
@@ -540,6 +543,97 @@ export default function ObjectivesPage() {
     return labels[category as keyof typeof labels] || 'Outros';
   };
 
+  const handleCreateGoal = async (goalData: {
+    title: string;
+    description: string;
+    category: string;
+    priority: 'low' | 'medium' | 'high';
+    targetDate: string;
+    status: string;
+    completed: boolean;
+    planId: string;
+    weekId: string;
+    weekNumber: number;
+  }) => {
+    try {
+      console.log('🔄 Criando novo objetivo:', goalData);
+      
+      const { goalService } = await import('../../../services/goalService');
+      
+      const result = await goalService.createGoal(goalData.planId, goalData.weekId, {
+        title: goalData.title,
+        description: goalData.description,
+        category: goalData.category,
+        priority: goalData.priority,
+        targetDate: goalData.targetDate,
+        status: goalData.status,
+        completed: goalData.completed
+      });
+
+      if (result.success) {
+        console.log('✅ Objetivo criado com sucesso:', result.data);
+        
+        // Recarregar objetivos para incluir o novo
+        if (goalData.weekNumber === selectedWeek || selectedWeek === 'all') {
+          await loadAllGoalsFromAPI();
+        }
+        
+        setShowGoalCreator(false);
+        setSelectedPlanForGoal(null);
+      } else {
+        console.error('❌ Erro ao criar objetivo:', result.error);
+      }
+    } catch (error) {
+      console.error('❌ Erro ao criar objetivo:', error);
+    }
+  };
+
+  const handleOpenGoalCreator = async () => {
+    // Se há planos disponíveis, usar o primeiro plano ativo
+    const activePlans = plans?.filter(plan => plan.status === 'active') || [];
+    if (activePlans.length > 0) {
+      const firstPlan = activePlans[0];
+      // Usar a primeira semana disponível ou semana 1 como padrão
+      const firstWeek = availableWeeks.length > 0 ? availableWeeks[0] : 1;
+      
+      try {
+        // Tentar obter o weekId real do backend
+        const { goalService } = await import('../../../services/goalService');
+        const weeksResponse = await goalService.getWeeks(firstPlan.id);
+        
+        let weekId = `week_${firstWeek}`; // Fallback
+        
+        if (weeksResponse.success && weeksResponse.data) {
+          // Procurar pela semana correspondente
+          const week = weeksResponse.data.find((w: any) => w.weekNumber === firstWeek);
+          if (week && week._id) {
+            weekId = week._id;
+          }
+        }
+        
+        setSelectedPlanForGoal({
+          planId: firstPlan.id,
+          weekId: weekId,
+          weekNumber: firstWeek,
+          planTitle: firstPlan.title
+        });
+        setShowGoalCreator(true);
+      } catch (error) {
+        console.warn('⚠️ Erro ao obter semanas do plano, usando fallback:', error);
+        // Fallback: usar formato padrão
+        setSelectedPlanForGoal({
+          planId: firstPlan.id,
+          weekId: `week_${firstWeek}`,
+          weekNumber: firstWeek,
+          planTitle: firstPlan.title
+        });
+        setShowGoalCreator(true);
+      }
+    } else {
+      console.warn('⚠️ Nenhum plano ativo encontrado para criar objetivo');
+    }
+  };
+
   const toggleGoalCompletion = async (goal: GoalWithPlanInfo) => {
     console.log('🔍 toggleGoalCompletion: Objetivo recebido:', goal);
     console.log('🔍 toggleGoalCompletion: Propriedades do objetivo:', {
@@ -726,6 +820,20 @@ export default function ObjectivesPage() {
       <PageHeader title="Objetivos" icon={Target} />
 
         <main className="px-4 sm:px-6 lg:px-8 py-8">
+          {/* Botão de Criação de Objetivos */}
+          <div className="flex justify-between items-center mb-6">
+            <div>
+              <h2 className="text-2xl font-bold text-gray-900">Gerenciar Objetivos</h2>
+              <p className="text-gray-600 mt-1">Crie e gerencie seus objetivos por semana</p>
+            </div>
+            <button
+              onClick={handleOpenGoalCreator}
+              className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-6 py-3 rounded-lg font-semibold hover:from-indigo-700 hover:to-purple-700 transition-all duration-300 flex items-center space-x-2 shadow-lg hover:shadow-xl transform hover:scale-105"
+            >
+              <Target className="w-5 h-5" />
+              <span>Novo Objetivo</span>
+            </button>
+          </div>
           {/* Notificação de API Offline */}
           {apiOffline && (
             <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
@@ -1019,6 +1127,22 @@ export default function ObjectivesPage() {
             </div>
           )}
         </main>
+
+        {/* Goal Creator Modal */}
+        {selectedPlanForGoal && (
+          <GoalCreator
+            open={showGoalCreator}
+            onClose={() => {
+              setShowGoalCreator(false);
+              setSelectedPlanForGoal(null);
+            }}
+            onCreateGoal={handleCreateGoal}
+            planId={selectedPlanForGoal.planId}
+            weekId={selectedPlanForGoal.weekId}
+            weekNumber={selectedPlanForGoal.weekNumber}
+            planTitle={selectedPlanForGoal.planTitle}
+          />
+        )}
     </div>
   );
 }
