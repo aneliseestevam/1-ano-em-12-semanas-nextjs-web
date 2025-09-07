@@ -1139,7 +1139,7 @@ export default function ObjectivesPage() {
                         return (
                         <div 
                           key={goal.id} 
-                          className={`border rounded-lg p-4 transition-all duration-200 hover:shadow-md ${
+                          className={`group border rounded-lg p-4 transition-all duration-200 hover:shadow-md ${
                             goal.completed 
                               ? 'bg-green-50 border-green-200' 
                               : 'bg-white border-gray-200'
@@ -1196,10 +1196,10 @@ export default function ObjectivesPage() {
                                 </div>
 
                                 {/* Action Buttons */}
-                                <div className="flex items-center space-x-1 ml-2">
+                                <div className="flex items-center space-x-1 ml-2 opacity-0 group-hover:opacity-100 transition-opacity">
                                   <button
                                     onClick={() => handleOpenGoalEditor(goal)}
-                                    className="p-1 text-gray-400 hover:text-blue-600 transition-colors"
+                                    className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
                                     title="Editar objetivo"
                                   >
                                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1232,7 +1232,7 @@ export default function ObjectivesPage() {
                     {filteredGoals.map((goal) => (
                       <div 
                         key={goal.id} 
-                        className={`border rounded-md p-3 transition-all duration-200 hover:shadow-sm ${
+                        className={`group border rounded-md p-3 transition-all duration-200 hover:shadow-sm ${
                           goal.completed 
                             ? 'bg-green-50 border-green-200' 
                             : 'bg-white border-gray-200'
@@ -1259,22 +1259,39 @@ export default function ObjectivesPage() {
                           </button>
 
                           <div className="flex-1 min-w-0">
-                            <h4 className={`font-medium text-sm mb-1 ${
-                              goal.completed ? 'text-green-800 line-through' : 'text-gray-900'
-                            }`}>
-                              {goal.title}
-                            </h4>
-                            
-                            <div className="flex items-center justify-between">
-                              <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getCategoryColor(goal.category)}`}>
-                                {getCategoryLabel(goal.category)}
-                              </span>
+                            <div className="flex items-start justify-between">
+                              <div className="flex-1 min-w-0">
+                                <h4 className={`font-medium text-sm mb-1 ${
+                                  goal.completed ? 'text-green-800 line-through' : 'text-gray-900'
+                                }`}>
+                                  {goal.title}
+                                </h4>
+                                
+                                <div className="flex items-center justify-between">
+                                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getCategoryColor(goal.category)}`}>
+                                    {getCategoryLabel(goal.category)}
+                                  </span>
 
-                    {goal.tasks && goal.tasks.length > 0 && (
-                                <span className="text-xs text-gray-500">
-                                  {goal.tasks.filter(t => t.completed).length}/{goal.tasks.length}
-                                </span>
-                              )}
+                                  {goal.tasks && goal.tasks.length > 0 && (
+                                    <span className="text-xs text-gray-500">
+                                      {goal.tasks.filter(t => t.completed).length}/{goal.tasks.length}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Action Buttons */}
+                              <div className="flex items-center space-x-1 ml-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <button
+                                  onClick={() => handleOpenGoalEditor(goal)}
+                                  className="p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                                  title="Editar objetivo"
+                                >
+                                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                  </svg>
+                                </button>
+                              </div>
                             </div>
                           </div>
                         </div>
