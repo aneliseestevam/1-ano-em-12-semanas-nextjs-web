@@ -593,8 +593,8 @@ export default function ObjectivesPage() {
       console.log('🔄 Tentando criar semana para o plano:', plan.id, 'semana:', weekNumber);
       
       // Primeiro, vamos tentar obter todas as semanas do plano para ver se existe alguma
-      const { goalService } = await import('../../../services/goalService');
-      const weeksResponse = await goalService.getWeeks(plan.id);
+      const optimizedPlanService = (await import('../../../services/optimizedPlanService')).default;
+      const weeksResponse = await optimizedPlanService.getPlanWeeks(plan.id);
       
       if (weeksResponse.success && weeksResponse.data && Array.isArray(weeksResponse.data) && weeksResponse.data.length > 0) {
         // Se existem semanas, usar a primeira disponível
@@ -628,9 +628,9 @@ export default function ObjectivesPage() {
       const firstWeek = availableWeeks.length > 0 ? availableWeeks[0] : 1;
       
       try {
-        // Tentar obter o weekId real do backend
-        const { goalService } = await import('../../../services/goalService');
-        const weeksResponse = await goalService.getWeeks(firstPlan.id);
+        // Tentar obter o weekId real do backend usando o endpoint correto
+        const optimizedPlanService = (await import('../../../services/optimizedPlanService')).default;
+        const weeksResponse = await optimizedPlanService.getPlanWeeks(firstPlan.id);
         
         console.log('🔍 Resposta das semanas:', weeksResponse);
         
