@@ -78,12 +78,28 @@ export default function PlansPage() {
 
   // Carregar estatísticas dos planos (otimizado)
   const loadPlansStats = async (forceReload = false) => {
-    if (!plans || plans.length === 0) return;
+    console.log('🔄 loadPlansStats called:', {
+      hasPlans: !!plans,
+      plansLength: plans?.length || 0,
+      initialLoadComplete,
+      forceReload,
+      plansWithStatsLength: plansWithStats.length
+    });
+    
+    if (!plans || plans.length === 0) {
+      console.log('❌ Nenhum plano disponível para carregar estatísticas');
+      return;
+    }
     
     // Se já carregou e não é reload forçado, usar cache
     if (initialLoadComplete && !forceReload && plansWithStats.length > 0) {
       console.log('📦 Usando cache de estatísticas');
       return;
+    }
+    
+    // Se não tem estatísticas ainda, precisa carregar
+    if (plansWithStats.length === 0) {
+      console.log('📊 Nenhuma estatística carregada ainda, carregando...');
     }
     
     setStatsLoading(true);
@@ -205,10 +221,19 @@ export default function PlansPage() {
 
   // Carregar estatísticas quando os planos mudarem (otimizado)
   useEffect(() => {
-    if (plans && plans.length > 0 && !initialLoadComplete) {
+    console.log('🔄 useEffect plans changed:', {
+      hasPlans: !!plans,
+      plansLength: plans?.length || 0,
+      initialLoadComplete,
+      plansWithStatsLength: plansWithStats.length,
+      shouldLoad: plans && plans.length > 0 && (!initialLoadComplete || plansWithStats.length === 0)
+    });
+    
+    if (plans && plans.length > 0 && (!initialLoadComplete || plansWithStats.length === 0)) {
+      console.log('✅ Carregando estatísticas dos planos...');
       loadPlansStats();
     }
-  }, [plans, initialLoadComplete]);
+  }, [plans, initialLoadComplete, plansWithStats.length]);
 
 
 
