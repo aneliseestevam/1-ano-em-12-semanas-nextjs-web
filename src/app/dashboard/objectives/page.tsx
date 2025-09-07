@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../../../hooks/useAuth';
 import { useRouter } from 'next/navigation';
-import { Target, Clock, Search } from 'lucide-react';
+import { Target } from 'lucide-react';
 import { Goal } from '../../../types/dashboard';
 import { usePlansManager } from '../../../hooks/usePlansManager';
 import { PageHeader, ProgressCard, StatCard, FilterBar, ButtonGroup, LoadingSpinner, EmptyState } from '../../../components/ui';
@@ -15,6 +15,8 @@ interface GoalWithPlanInfo extends Goal {
   weekId: string;
 }
 
+// Interfaces removidas para simplificar tipos
+
 export default function ObjectivesPage() {
   const { isAuthenticated, loading: authLoading } = useAuth();
   const router = useRouter();
@@ -24,7 +26,7 @@ export default function ObjectivesPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'completed' | 'pending'>('all');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
-  const [activePlanFilter, setActivePlanFilter] = useState<string>('all');
+  const [activePlanFilter] = useState<string>('all');
   const [apiStats, setApiStats] = useState<{ overview?: { plans?: { completedPlans?: number; activePlans?: number; totalPlans?: number; avgDuration?: number }; goals?: { completedGoals?: number; pendingGoals?: number } } } | null>(null);
   const [goalsLoading, setGoalsLoading] = useState(false);
   const [updatingGoal, setUpdatingGoal] = useState<string | null>(null);
@@ -32,7 +34,7 @@ export default function ObjectivesPage() {
   const [availableWeeks, setAvailableWeeks] = useState<number[]>([]);
   const [currentWeek, setCurrentWeek] = useState<number>(1);
   const [loadedWeeks, setLoadedWeeks] = useState<Set<number>>(new Set());
-  const [apiOffline, setApiOffline] = useState(false);
+  const [apiOffline] = useState(false);
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
@@ -119,7 +121,7 @@ export default function ObjectivesPage() {
         
         if (activePlan.weeks && activePlan.weeks.length > 0) {
           const weeksArray = activePlan.weeks
-            .map((week: any) => week.weekNumber)
+            .map((week) => week.weekNumber)
             .filter((weekNumber: number) => weekNumber > 0)
             .sort((a: number, b: number) => a - b);
           
@@ -241,17 +243,17 @@ export default function ObjectivesPage() {
   };
 
   // Nova função para carregar objetivos diretamente dos dados do plano
-  const loadGoalsFromPlanData = (planData: { _id: string; title: string; weeks: Array<{ _id: string; weekNumber: number; goals: Array<{ _id: string; id?: string; title: string; description: string; category: string; priority: string; status: string; completed: boolean; targetDate?: string; completedAt?: string; createdAt: string; updatedAt: string; tasks: unknown[] }> }> }, weekNumber: number) => {
+  const loadGoalsFromPlanData = (planData: unknown, weekNumber: number) => {
     try {
       console.log(`🚀 loadGoalsFromPlanData: Carregando objetivos da semana ${weekNumber} dos dados do plano`);
       
-      const week = planData.weeks.find((w) => w.weekNumber === weekNumber);
+      const week = (planData as any).weeks?.find((w: any) => w.weekNumber === weekNumber);
       if (!week || !week.goals) {
         console.warn(`⚠️ Semana ${weekNumber} não encontrada ou sem objetivos`);
         return;
       }
       
-      const goalsWithPlanInfo: GoalWithPlanInfo[] = week.goals.map((goal) => ({
+      const goalsWithPlanInfo: GoalWithPlanInfo[] = week.goals.map((goal: any) => ({
         id: goal._id || goal.id,
         title: goal.title,
         description: goal.description,
@@ -264,10 +266,10 @@ export default function ObjectivesPage() {
         createdAt: goal.createdAt ? new Date(goal.createdAt) : new Date(),
         updatedAt: goal.updatedAt ? new Date(goal.updatedAt) : new Date(),
         tasks: goal.tasks || [],
-        planId: planData._id,
-        planTitle: planData.title,
+        planId: (planData as any)._id,
+        planTitle: (planData as any).title,
         weekNumber: weekNumber,
-        weekId: week._id
+        weekId: (week as any)._id
       }));
       
       setAllGoals(goalsWithPlanInfo);
@@ -367,14 +369,20 @@ export default function ObjectivesPage() {
         if (plan.weeks && plan.weeks.length > 0) {
           for (const week of plan.weeks) {
             if (week.goals && week.goals.length > 0) {
-              week.goals.forEach((goal: any) => {
+              week.goals.forEach((goal) => {
                 const goalData = {
                   ...goal,
-                  id: goal.id || goal._id,
-                  planId: plan._id,
-                  planTitle: plan.title,
-                  weekNumber: week.weekNumber,
-                  weekId: week._id
+                  id: (goal as any).id || (goal as any)._id,
+                  planId: (plan as any)._id,
+                  planTitle: (plan as any).title,
+                  weekNumber: (week as any).weekNumber,
+                  weekId: (week as any)._id,
+                  updatedAt: (goal as any).updatedAt || new Date().toISOString(),
+                  category: (goal as any).category as "saude" | "carreira" | "financas" | "relacionamentos" | "hobbies" | "outros",
+                  targetDate: (goal as any).targetDate ? new Date((goal as any).targetDate) : undefined,
+                  completedAt: (goal as any).completedAt ? new Date((goal as any).completedAt) : undefined,
+                  createdAt: (goal as any).createdAt ? new Date((goal as any).createdAt) : new Date(),
+                  tasks: (goal as any).tasks || []
                 };
                 
                 // Log detalhado para debug
@@ -442,14 +450,20 @@ export default function ObjectivesPage() {
         if (plan.weeks && plan.weeks.length > 0) {
           for (const week of plan.weeks) {
             if (week.goals && week.goals.length > 0) {
-              week.goals.forEach((goal: any) => {
+              week.goals.forEach((goal) => {
                 allGoals.push({
                   ...goal,
-                  id: goal.id || goal._id,
-                  planId: plan._id,
-                  planTitle: plan.title,
-                  weekNumber: week.weekNumber,
-                  weekId: week._id
+                  id: (goal as any).id || (goal as any)._id,
+                  planId: (plan as any)._id,
+                  planTitle: (plan as any).title,
+                  weekNumber: (week as any).weekNumber,
+                  weekId: (week as any)._id,
+                  updatedAt: (goal as any).updatedAt || new Date().toISOString(),
+                  category: (goal as any).category as "saude" | "carreira" | "financas" | "relacionamentos" | "hobbies" | "outros",
+                  targetDate: (goal as any).targetDate ? new Date((goal as any).targetDate) : undefined,
+                  completedAt: (goal as any).completedAt ? new Date((goal as any).completedAt) : undefined,
+                  createdAt: (goal as any).createdAt ? new Date((goal as any).createdAt) : new Date(),
+                  tasks: (goal as any).tasks || []
                 });
               });
               
@@ -530,7 +544,7 @@ export default function ObjectivesPage() {
     console.log('🔍 toggleGoalCompletion: Objetivo recebido:', goal);
     console.log('🔍 toggleGoalCompletion: Propriedades do objetivo:', {
       id: goal.id,
-      _id: (goal as any)._id,
+      _id: (goal as GoalWithPlanInfo & { _id?: string })._id,
       planId: goal.planId,
       weekId: goal.weekId,
       weekNumber: goal.weekNumber,
@@ -598,14 +612,14 @@ export default function ObjectivesPage() {
   }
 
   // Função auxiliar para verificar se um objetivo está concluído
-  const isGoalCompleted = (goal: any): boolean => {
+  const isGoalCompleted = (goal: GoalWithPlanInfo): boolean => {
     // Verificar diferentes formatos possíveis de completed
-    if (goal.completed === true || goal.completed === 'true' || goal.completed === 1) {
+    if (goal.completed === true || (goal.completed as any) === 'true' || (goal.completed as any) === 1) {
       return true;
     }
     
     // Verificar se é false, 'false', 0, null, undefined
-    if (goal.completed === false || goal.completed === 'false' || goal.completed === 0 || 
+    if (goal.completed === false || (goal.completed as any) === 'false' || (goal.completed as any) === 0 || 
         goal.completed === null || goal.completed === undefined) {
       return false;
     }
@@ -687,25 +701,25 @@ export default function ObjectivesPage() {
   });
 
   // Calcular estatísticas do plano ativo de forma segura
-  const activePlans = plans?.filter(plan => 
-    plan.status === 'active' || 
-    (plan.weeks && plan.weeks.length > 0)
-  ) || [];
+  // const activePlans = plans?.filter(plan => 
+  //   plan.status === 'active' || 
+  //   (plan.weeks && plan.weeks.length > 0)
+  // ) || [];
 
-  const currentPlan = activePlans[0]; // Pegar o primeiro plano ativo
-  const totalWeeks = currentPlan?.weeks?.length || availableWeeks.length || 0;
+  // const currentPlan = activePlans[0]; // Pegar o primeiro plano ativo
+  // const totalWeeks = currentPlan?.weeks?.length || availableWeeks.length || 0;
   
   // Calcular semanas concluídas de forma mais simples
-  const completedWeeks = Math.min(
-    Math.floor((completedGoals / Math.max(totalGoals, 1)) * totalWeeks),
-    totalWeeks
-  );
+  // const completedWeeks = Math.min(
+  //   Math.floor((completedGoals / Math.max(totalGoals, 1)) * totalWeeks),
+  //   totalWeeks
+  // );
 
   // Calcular progresso baseado na semana selecionada
   const overallProgress = totalGoals > 0 ? Math.round((completedGoals / totalGoals) * 100) : 0;
   
   // Calcular média de objetivos por semana
-  const avgObjectivesPerWeek = totalWeeks > 0 ? (totalGoals / totalWeeks).toFixed(1) : '0.0';
+  // const avgObjectivesPerWeek = totalWeeks > 0 ? (totalGoals / totalWeeks).toFixed(1) : '0.0';
 
   return (
     <div>
@@ -774,7 +788,7 @@ export default function ObjectivesPage() {
               ...availableWeeks.map(week => ({ value: week, label: week.toString() }))
             ]}
             selectedValue={selectedWeek}
-            onSelect={setSelectedWeek}
+            onSelect={(value) => setSelectedWeek(value as number | 'all')}
             className="mb-6"
           />
 

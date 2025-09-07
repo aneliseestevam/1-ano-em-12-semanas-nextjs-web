@@ -4,7 +4,6 @@ import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { useAuth } from '../../hooks/useAuth';
 import { useRouter } from 'next/navigation';
 import { 
-  Plus, 
   Calendar, 
   BarChart3, 
   Target, 
@@ -15,7 +14,7 @@ import {
 } from 'lucide-react';
 import { DashboardStats } from '../../types/dashboard';
 import { usePlansManager } from '../../hooks/usePlansManager';
-import { PageHeader, ProgressCard, StatCard, LoadingSpinner, EmptyState } from '../../components/ui';
+import { PageHeader, LoadingSpinner, EmptyState } from '../../components/ui';
 
 export default function Dashboard() {
   const { isAuthenticated, loading: authLoading } = useAuth();

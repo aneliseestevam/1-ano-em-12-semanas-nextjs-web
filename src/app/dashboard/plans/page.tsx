@@ -8,7 +8,49 @@ import { Plus, Edit, Trash2, Eye, Calendar, Target, CheckCircle, Clock } from 'l
 import { dashboardService } from '../../../services/dashboardService';
 import { usePlansManager } from '../../../hooks/usePlansManager';
 import { planService } from '../../../services/planService';
-import { PageHeader, StatCard, FilterBar, LoadingSpinner, EmptyState } from '../../../components/ui';
+import { PageHeader } from '../../../components/ui';
+
+interface PlanStats {
+  planId?: string;
+  id?: string;
+  totalGoals?: number;
+  completedGoals?: number;
+  [key: string]: unknown;
+}
+
+interface PlanWithStats {
+  id: string;
+  title: string;
+  description: string;
+  status: string;
+  totalGoals: number;
+  completedGoals: number;
+  completionRate: number;
+  weeks?: Week[];
+  [key: string]: unknown;
+}
+
+interface Week {
+  _id: string;
+  weekNumber: number;
+  goals?: Goal[];
+  [key: string]: unknown;
+}
+
+interface Goal {
+  _id: string;
+  title: string;
+  completed: boolean;
+  tasks?: Task[];
+  [key: string]: unknown;
+}
+
+interface Task {
+  _id: string;
+  title: string;
+  completed: boolean;
+  [key: string]: unknown;
+}
 
 export default function PlansPage() {
   const { isAuthenticated, loading: authLoading } = useAuth();
@@ -16,7 +58,7 @@ export default function PlansPage() {
   const { plans, loading: plansLoading, loadPlans, activatePlan } = usePlansManager();
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const [plansWithStats, setPlansWithStats] = useState<any[]>([]);
+  const [plansWithStats, setPlansWithStats] = useState<PlanWithStats[]>([]);
   const [statsLoading, setStatsLoading] = useState(false);
 
   useEffect(() => {
@@ -46,10 +88,10 @@ export default function PlansPage() {
         console.log('✅ Planos com detalhes carregados:', plansWithDetailsResult.data.length);
         
         // Calcular estatísticas baseado nos dados completos
-        const updatedPlans = plansWithDetailsResult.data.map(plan => calculatePlanStats(plan));
+        const updatedPlans = plansWithDetailsResult.data.map((plan: any) => calculatePlanStats(plan));
         setPlansWithStats(updatedPlans);
         
-        console.log('✅ Estatísticas calculadas:', updatedPlans.map(p => ({
+        console.log('✅ Estatísticas calculadas:', updatedPlans.map((p: any) => ({
           title: p.title,
           totalGoals: p.totalGoals,
           completedGoals: p.completedGoals,
@@ -66,8 +108,8 @@ export default function PlansPage() {
           
           const statsData = statsResult.data;
           const updatedPlans = plans.map(plan => {
-            const planStats = statsData.plans?.find((p: any) => p.planId === plan.id) || 
-                             statsData.summary?.plans?.find((p: any) => p.id === plan.id);
+            const planStats = statsData.plans?.find((p: PlanStats) => p.planId === plan.id) || 
+                             statsData.summary?.plans?.find((p: PlanStats) => p.id === plan.id);
             
             if (planStats) {
               return {
@@ -80,21 +122,21 @@ export default function PlansPage() {
               };
             }
             
-            return calculatePlanStats(plan);
+            return calculatePlanStats(plan as any);
           });
           
-          setPlansWithStats(updatedPlans);
+          setPlansWithStats(updatedPlans as any);
         } else {
           console.log('⚠️ API de estatísticas não disponível, usando dados básicos...');
           // Último fallback: usar dados básicos dos planos
-          const updatedPlans = plans.map(plan => calculatePlanStats(plan));
-          setPlansWithStats(updatedPlans);
+          const updatedPlans = plans.map(plan => calculatePlanStats(plan as any));
+          setPlansWithStats(updatedPlans as any);
         }
       }
     } catch (error) {
       console.error('❌ Erro ao carregar estatísticas:', error);
       // Fallback final: usar dados básicos
-      const updatedPlans = plans.map(plan => calculatePlanStats(plan));
+      const updatedPlans = plans.map(plan => calculatePlanStats(plan as any));
       setPlansWithStats(updatedPlans);
     } finally {
       setStatsLoading(false);
@@ -102,7 +144,7 @@ export default function PlansPage() {
   };
 
   // Função para calcular estatísticas de um plano individual
-  const calculatePlanStats = (plan: any) => {
+  const calculatePlanStats = (plan: PlanWithStats) => {
     let totalGoals = 0;
     let completedGoals = 0;
     let totalTasks = 0;
@@ -110,14 +152,14 @@ export default function PlansPage() {
 
     // Se o plano tem semanas com objetivos, calcular baseado neles
     if (plan.weeks && plan.weeks.length > 0) {
-      plan.weeks.forEach((week: any) => {
+      plan.weeks.forEach((week: Week) => {
         if (week.goals && week.goals.length > 0) {
-          week.goals.forEach((goal: any) => {
+          week.goals.forEach((goal: Goal) => {
             totalGoals++;
             if (goal.completed) completedGoals++;
             
             if (goal.tasks && goal.tasks.length > 0) {
-              goal.tasks.forEach((task: any) => {
+              goal.tasks.forEach((task: Task) => {
                 totalTasks++;
                 if (task.completed) completedTasks++;
               });
@@ -129,8 +171,8 @@ export default function PlansPage() {
       // Usar dados básicos do plano se disponíveis
       totalGoals = plan.totalGoals || 0;
       completedGoals = plan.completedGoals || 0;
-      totalTasks = plan.totalTasks || 0;
-      completedTasks = plan.completedTasks || 0;
+      totalTasks = (plan as any).totalTasks || 0;
+      completedTasks = (plan as any).completedTasks || 0;
     }
 
     const completionRate = totalGoals > 0 ? Math.round((completedGoals / totalGoals) * 100) : 0;
@@ -362,7 +404,7 @@ export default function PlansPage() {
                   <div className="space-y-2 mb-4">
                     <div className="flex items-center text-sm text-gray-600">
                       <Calendar className="w-4 h-4 mr-2" />
-                      <span>{new Date(plan.startDate).toLocaleDateString('pt-BR')} - {new Date(plan.endDate).toLocaleDateString('pt-BR')}</span>
+                      <span>{new Date((plan as any).startDate).toLocaleDateString('pt-BR')} - {new Date((plan as any).endDate).toLocaleDateString('pt-BR')}</span>
                     </div>
                     <div className="flex items-center text-sm text-gray-600">
                       <Target className="w-4 h-4 mr-2" />

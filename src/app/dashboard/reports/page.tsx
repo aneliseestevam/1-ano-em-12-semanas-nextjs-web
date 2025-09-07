@@ -3,16 +3,16 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../../../hooks/useAuth';
 import { useRouter } from 'next/navigation';
-import { BarChart3, TrendingUp, Download, Target, CheckCircle, Filter } from 'lucide-react';
-import { TwelveWeekPlan } from '../../../types/dashboard';
+import { BarChart3, TrendingUp, Target, CheckCircle, Filter } from 'lucide-react';
+// import { TwelveWeekPlan } from '../../../types/dashboard';
 import { usePlansManager } from '../../../hooks/usePlansManager';
-import { PageHeader, StatCard, FilterBar, LoadingSpinner, EmptyState } from '../../../components/ui';
+import { PageHeader, LoadingSpinner } from '../../../components/ui';
 
 export default function ReportsPage() {
   const { isAuthenticated, loading: authLoading } = useAuth();
   const router = useRouter();
   const { plans, loading: plansLoading, loadPlans } = usePlansManager();
-  const [apiStats, setApiStats] = useState<{ overview?: any; summary?: any } | null>(null);
+  const [apiStats, setApiStats] = useState<{ overview?: unknown; summary?: unknown } | null>(null);
   const [selectedPeriod, setSelectedPeriod] = useState<'week' | 'month' | 'quarter' | 'year'>('month');
   const [selectedPlan, setSelectedPlan] = useState<string>('all');
 
@@ -54,16 +54,16 @@ export default function ReportsPage() {
     // Priorizar dados da API se disponíveis
     if (apiStats?.overview) {
       return {
-        totalPlans: apiStats.overview.plans?.totalPlans || 0,
-        completedPlans: apiStats.overview.plans?.completedPlans || 0,
-        activePlans: apiStats.overview.plans?.activePlans || 0,
-        totalGoals: apiStats.overview.goals?.totalGoals || 0,
-        completedGoals: apiStats.overview.goals?.completedGoals || 0,
-        totalTasks: apiStats.overview.tasks?.totalTasks || 0,
-        completedTasks: apiStats.overview.tasks?.completedTasks || 0,
-        goalCompletionRate: apiStats.summary?.goalCompletionRate || 0,
-        taskCompletionRate: apiStats.summary?.taskCompletionRate || 0,
-        planCompletionRate: apiStats.summary?.planCompletionRate || 0,
+        totalPlans: (apiStats.overview as any).plans?.totalPlans || 0,
+        completedPlans: (apiStats.overview as any).plans?.completedPlans || 0,
+        activePlans: (apiStats.overview as any).plans?.activePlans || 0,
+        totalGoals: (apiStats.overview as any).goals?.totalGoals || 0,
+        completedGoals: (apiStats.overview as any).goals?.completedGoals || 0,
+        totalTasks: (apiStats.overview as any).tasks?.totalTasks || 0,
+        completedTasks: (apiStats.overview as any).tasks?.completedTasks || 0,
+        goalCompletionRate: (apiStats.summary as any)?.goalCompletionRate || 0,
+        taskCompletionRate: (apiStats.summary as any)?.taskCompletionRate || 0,
+        planCompletionRate: (apiStats.summary as any)?.planCompletionRate || 0,
         categoryStats: [] // Array vazio para evitar erro de .map()
       };
     }
@@ -159,10 +159,10 @@ export default function ReportsPage() {
     return colors[category as keyof typeof colors] || 'bg-gray-500';
   };
 
-  const handleExportReport = (format: 'pdf' | 'csv' | 'excel') => {
-    // Implementar exportação de relatório
-    console.log(`Exporting report as ${format}`);
-  };
+  // const handleExportReport = (format: 'pdf' | 'csv' | 'excel') => {
+  //   // Implementar exportação de relatório
+  //   console.log(`Exporting report as ${format}`);
+  // };
 
   if (authLoading || !isAuthenticated) {
     return (
