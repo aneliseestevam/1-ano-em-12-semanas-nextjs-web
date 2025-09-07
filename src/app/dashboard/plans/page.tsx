@@ -106,37 +106,60 @@ export default function PlansPage() {
     try {
       console.log('🔄 Carregando estatísticas dos planos...');
       
-      // Estratégia otimizada: tentar apenas uma API por vez
+      // Estratégia otimizada: usar endpoint /stats como fonte principal
       let updatedPlans: PlanWithStats[] = [];
       
-      // Primeiro, tentar API de estatísticas (mais rápida)
+      // Primeiro, tentar API de estatísticas (fonte principal de dados)
       try {
         const statsResult = await planService.getAllPlansStats();
         
         if (statsResult.success && statsResult.data) {
-          console.log('✅ Estatísticas carregadas da API (rápida)');
+          console.log('✅ Estatísticas carregadas da API /stats');
           
           const statsData = statsResult.data;
-          updatedPlans = plans.map(plan => {
-            const planStats = statsData.plans?.find((p: PlanStats) => p.planId === plan.id) || 
-                             statsData.summary?.plans?.find((p: PlanStats) => p.id === plan.id);
-            
-            if (planStats) {
-              return {
-                ...plan,
-                totalGoals: planStats.totalGoals || 0,
-                completedGoals: planStats.completedGoals || 0,
-                completionRate: planStats.completionRate || 0,
-                totalTasks: planStats.totalTasks || 0,
-                completedTasks: planStats.completedTasks || 0
-              } as unknown as PlanWithStats;
-            }
-            
-            return calculatePlanStats(plan as any);
-          });
+          
+          // Usar detailedPlans do endpoint /stats que tem todas as informações
+          if (statsData.detailedPlans && statsData.detailedPlans.length > 0) {
+            console.log('📊 Usando detailedPlans do endpoint /stats:', statsData.detailedPlans.length, 'planos');
+            console.log('📊 Exemplo de detailedPlan:', statsData.detailedPlans[0]);
+            updatedPlans = statsData.detailedPlans.map((detailedPlan: any) => ({
+              id: detailedPlan._id,
+              title: detailedPlan.title,
+              description: plans.find(p => p.id === detailedPlan._id)?.description || 'Sem descrição',
+              status: detailedPlan.status,
+              totalGoals: detailedPlan.totalGoals || 0,
+              completedGoals: detailedPlan.completedGoals || 0,
+              completionRate: detailedPlan.weekProgress || 0,
+              totalTasks: detailedPlan.totalTasks || 0,
+              completedTasks: detailedPlan.completedTasks || 0,
+              startDate: new Date(detailedPlan.startDate),
+              endDate: new Date(detailedPlan.endDate),
+              createdAt: new Date(detailedPlan.createdAt),
+              isActive: detailedPlan.isActive
+            } as PlanWithStats));
+          } else {
+            // Fallback: mapear planos básicos com estatísticas do summary
+            console.log('📊 Usando summary do endpoint /stats');
+            updatedPlans = plans.map(plan => {
+              const planStats = statsData.summary;
+              
+              if (planStats) {
+                return {
+                  ...plan,
+                  totalGoals: planStats.totalGoals || 0,
+                  completedGoals: planStats.totalGoals ? Math.round((planStats.goalCompletionRate / 100) * planStats.totalGoals) : 0,
+                  completionRate: planStats.goalCompletionRate || 0,
+                  totalTasks: planStats.totalTasks || 0,
+                  completedTasks: planStats.totalTasks ? Math.round((planStats.taskCompletionRate / 100) * planStats.totalTasks) : 0
+                } as unknown as PlanWithStats;
+              }
+              
+              return calculatePlanStats(plan as any);
+            });
+          }
         }
-      } catch {
-        console.log('⚠️ API de estatísticas falhou, tentando planos com detalhes...');
+      } catch (error) {
+        console.log('⚠️ API de estatísticas falhou:', error);
       }
       
       // Se não conseguiu com API de estatísticas, tentar planos com detalhes
@@ -163,6 +186,7 @@ export default function PlansPage() {
       setInitialLoadComplete(true);
       
       console.log('✅ Estatísticas carregadas:', updatedPlans.length, 'planos');
+      console.log('📊 Exemplo de plano com estatísticas:', updatedPlans[0]);
       
     } catch (error) {
       console.error('❌ Erro ao carregar estatísticas:', error);
