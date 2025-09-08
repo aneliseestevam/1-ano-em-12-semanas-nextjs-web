@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useAuth } from '../../../hooks/useAuth';
+import { useDateMonitoring } from '../../../hooks/useDateMonitoring';
 import { useRouter } from 'next/navigation';
 import { Plus, Edit, Trash2, Eye, Calendar, Target, CheckCircle, Clock } from 'lucide-react';
 // import { TwelveWeekPlan } from '../../../types/dashboard';
@@ -55,6 +56,7 @@ interface Task {
 
 export default function PlansPage() {
   const { isAuthenticated, loading: authLoading } = useAuth();
+  const { currentDate, isNewDay } = useDateMonitoring();
   const router = useRouter();
   const { plans, loading: plansLoading, loadPlans, activatePlan, createPlan, deletePlan } = usePlansManager();
   const [error, setError] = useState<string | null>(null);

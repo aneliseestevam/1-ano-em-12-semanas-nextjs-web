@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useAuth } from '../../../hooks/useAuth';
+import { useDateMonitoring } from '../../../hooks/useDateMonitoring';
 import { useRouter } from 'next/navigation';
 import { BarChart3, TrendingUp, Target, CheckCircle, Filter } from 'lucide-react';
 // import { TwelveWeekPlan } from '../../../types/dashboard';
@@ -10,6 +11,7 @@ import { PageHeader, LoadingSpinner } from '../../../components/ui';
 
 export default function ReportsPage() {
   const { isAuthenticated, loading: authLoading } = useAuth();
+  const { currentDate, isNewDay } = useDateMonitoring();
   const router = useRouter();
   const { plans, loading: plansLoading, loadPlans } = usePlansManager();
   const [apiStats, setApiStats] = useState<{ overview?: unknown; summary?: unknown } | null>(null);

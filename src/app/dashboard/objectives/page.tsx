@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../../../hooks/useAuth';
+import { useDateMonitoring } from '../../../hooks/useDateMonitoring';
 import { useRouter } from 'next/navigation';
 import { Target } from 'lucide-react';
 import { Goal } from '../../../types/dashboard';
@@ -21,6 +22,7 @@ interface GoalWithPlanInfo extends Goal {
 
 export default function ObjectivesPage() {
   const { isAuthenticated, loading: authLoading } = useAuth();
+  const { currentDate, isNewDay } = useDateMonitoring();
   const router = useRouter();
   const { plans, loading: plansLoading, loadPlans } = usePlansManager();
   const [allGoals, setAllGoals] = useState<GoalWithPlanInfo[]>([]);

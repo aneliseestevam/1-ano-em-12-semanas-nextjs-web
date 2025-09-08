@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { useAuth } from '../../hooks/useAuth';
+import { useDateMonitoring } from '../../hooks/useDateMonitoring';
 import { useRouter } from 'next/navigation';
 import { 
   Calendar, 
@@ -18,6 +19,7 @@ import { PageHeader, LoadingSpinner, EmptyState } from '../../components/ui';
 
 export default function Dashboard() {
   const { isAuthenticated, loading: authLoading } = useAuth();
+  const { currentDate, isNewDay } = useDateMonitoring();
   const router = useRouter();
   const { plans, loadPlans } = usePlansManager();
   

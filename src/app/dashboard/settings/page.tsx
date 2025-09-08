@@ -2,12 +2,14 @@
 
 import { useState, useEffect } from 'react';
 import { useAuth } from '../../../hooks/useAuth';
+import { useDateMonitoring } from '../../../hooks/useDateMonitoring';
 import { useRouter } from 'next/navigation';
 import { Settings, User, Lock, Bell, Palette, Save, Eye, EyeOff } from 'lucide-react';
 import { PageHeader, LoadingSpinner } from '../../../components/ui';
 
 export default function SettingsPage() {
   const { user, isAuthenticated, loading: authLoading, updateProfile, changePassword } = useAuth();
+  const { currentDate, isNewDay } = useDateMonitoring();
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
