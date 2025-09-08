@@ -13,7 +13,7 @@ import {
   Folder,
   ArrowRight
 } from 'lucide-react';
-import { DashboardStats } from '../../types/dashboard';
+import { DashboardStats, TwelveWeekPlan } from '../../types/dashboard';
 import { usePlansManager } from '../../hooks/usePlansManager';
 import { PageHeader, LoadingSpinner, EmptyState } from '../../components/ui';
 
@@ -26,6 +26,66 @@ export default function Dashboard() {
   const [dashboardStats, setDashboardStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [statsLoading, setStatsLoading] = useState(true);
+  const [plansWithWeeks, setPlansWithWeeks] = useState<TwelveWeekPlan[]>([]);
+
+  // Carregar semanas com dados completos
+  const loadPlansWithWeeks = useCallback(async () => {
+    try {
+      console.log('🔄 Carregando planos com semanas completas...');
+      const { default: optimizedPlanService } = await import('../../services/optimizedPlanService');
+      
+      const plansWithWeeksData = await Promise.all(
+        plans.map(async (plan) => {
+          try {
+            const weeksResult = await optimizedPlanService.getPlanWeeks(plan.id);
+            if (weeksResult.success && weeksResult.data.weeks) {
+              // Carregar objetivos para cada semana
+              const weeksWithGoals = await Promise.all(
+                weeksResult.data.weeks.map(async (week: any) => {
+                  try {
+                    const goalsResult = await optimizedPlanService.getWeekGoals(plan.id, week._id);
+                    return {
+                      ...week,
+                      id: week._id,
+                      goals: goalsResult.success ? goalsResult.data || [] : []
+                    };
+                  } catch (error) {
+                    console.warn(`⚠️ Erro ao carregar objetivos da semana ${week.weekNumber}:`, error);
+                    return {
+                      ...week,
+                      id: week._id,
+                      goals: []
+                    };
+                  }
+                })
+              );
+              
+              return {
+                ...plan,
+                weeks: weeksWithGoals
+              };
+            }
+            return plan;
+          } catch (error) {
+            console.warn(`⚠️ Erro ao carregar semanas do plano ${plan.title}:`, error);
+            return plan;
+          }
+        })
+      );
+      
+      setPlansWithWeeks(plansWithWeeksData);
+      console.log('✅ Planos com semanas carregados:', plansWithWeeksData.length);
+    } catch (error) {
+      console.error('❌ Erro ao carregar planos com semanas:', error);
+    }
+  }, [plans]);
+
+  // Carregar semanas quando os planos mudarem
+  useEffect(() => {
+    if (plans.length > 0) {
+      loadPlansWithWeeks();
+    }
+  }, [plans, loadPlansWithWeeks]);
 
   // Memoizar estatísticas básicas para evitar recálculos desnecessários
   const basicStats = useMemo(() => {
@@ -335,7 +395,10 @@ export default function Dashboard() {
               weeks: plan.weeks?.length
             })));
 
-            const activePlan = plans.find(plan => 
+            // Usar planos com semanas carregadas se disponível, senão usar planos básicos
+            const plansToUse = plansWithWeeks.length > 0 ? plansWithWeeks : plans;
+            
+            const activePlan = plansToUse.find(plan => 
               plan.status === 'active' || 
               (plan.weeks && plan.weeks.length > 0 && plan.weeks.some(week => week.goals && week.goals.length > 0)) ||
               (plan.totalGoals && plan.totalGoals > 0) // Incluir planos com objetivos mesmo sem semanas carregadas
@@ -425,6 +488,12 @@ export default function Dashboard() {
               totalTasks,
               completedTasks,
               weeks: activePlan.weeks?.length,
+              weeksData: activePlan.weeks?.map(w => ({
+                weekNumber: w.weekNumber,
+                endDate: w.endDate,
+                hasEndDate: !!w.endDate,
+                goalsCount: w.goals?.length || 0
+              })) || [],
               planData: {
                 totalGoals: activePlan.totalGoals,
                 completedGoals: activePlan.completedGoals,
@@ -441,12 +510,30 @@ export default function Dashboard() {
 
             // Calcular semanas concluídas
             const completedWeeks = activePlan.weeks?.filter(week => {
-              const hasGoals = week.goals && week.goals.length > 0;
+              const hasGoals = week.goals && Array.isArray(week.goals) && week.goals.length > 0;
               const allGoalsCompleted = hasGoals && week.goals.every(goal => goal.completed);
               
               // Verificar se a semana já passou (baseado na data de fim)
-              const weekEndDate = new Date(week.endDate);
-              const isWeekPast = weekEndDate < now;
+              let isWeekPast = false;
+              if (week.endDate) {
+                try {
+                  const weekEndDate = new Date(week.endDate);
+                  isWeekPast = weekEndDate < now;
+                } catch (error) {
+                  console.warn(`⚠️ Erro ao processar endDate da semana ${week.weekNumber}:`, week.endDate, error);
+                }
+              } else {
+                // Se não tem endDate, calcular baseado no startDate do plano e número da semana
+                try {
+                  const weekStartDate = new Date(startDate);
+                  weekStartDate.setDate(startDate.getDate() + (week.weekNumber - 1) * 7);
+                  const weekEndDate = new Date(weekStartDate);
+                  weekEndDate.setDate(weekStartDate.getDate() + 6); // Fim da semana
+                  isWeekPast = weekEndDate < now;
+                } catch (error) {
+                  console.warn(`⚠️ Erro ao calcular data da semana ${week.weekNumber}:`, error);
+                }
+              }
               
               // Uma semana é considerada concluída se:
               // 1. Tem objetivos e todos estão completos, OU
@@ -457,10 +544,10 @@ export default function Dashboard() {
                 hasGoals,
                 goalsCount: week.goals?.length || 0,
                 allGoalsCompleted,
-                weekEndDate: weekEndDate.toDateString(),
+                weekEndDate: week.endDate,
                 isWeekPast,
                 isCompleted,
-                goals: week.goals?.map(g => ({ id: g.id, title: g.title, completed: g.completed })) || []
+                goals: (week.goals && Array.isArray(week.goals)) ? week.goals.map(g => ({ id: g.id, title: g.title, completed: g.completed })) : []
               });
               
               return isCompleted;

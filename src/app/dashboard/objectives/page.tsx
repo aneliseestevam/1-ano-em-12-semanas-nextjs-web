@@ -135,14 +135,22 @@ export default function ObjectivesPage() {
           
           setAvailableWeeks(weeksArray);
           
-          // Definir semana atual (primeira semana disponível)
+          // Calcular semana atual baseada na data
           if (weeksArray.length > 0) {
-            setCurrentWeek(weeksArray[0]);
-            setSelectedWeek(weeksArray[0]);
+            const now = currentDate;
+            const startDate = new Date(activePlan.startDate);
+            const weeksSinceStart = Math.floor((now.getTime() - startDate.getTime()) / (7 * 24 * 60 * 60 * 1000));
+            const calculatedCurrentWeek = Math.min(Math.max(weeksSinceStart + 1, 1), 12);
+            
+            // Verificar se a semana calculada está disponível, senão usar a primeira disponível
+            const actualCurrentWeek = weeksArray.includes(calculatedCurrentWeek) ? calculatedCurrentWeek : weeksArray[0];
+            
+            setCurrentWeek(actualCurrentWeek);
+            setSelectedWeek(actualCurrentWeek);
             
             // Carregar objetivos da semana atual diretamente dos dados já carregados
-            console.log(`🚀 Carregando objetivos da semana ${weeksArray[0]} dos dados já carregados`);
-            loadGoalsFromPlanData(activePlan, weeksArray[0]);
+            console.log(`🚀 Carregando objetivos da semana ${actualCurrentWeek} (calculada: ${calculatedCurrentWeek}) dos dados já carregados`);
+            loadGoalsFromPlanData(activePlan, actualCurrentWeek);
           }
           
           console.log('📅 Semanas disponíveis (nova API):', weeksArray);
@@ -335,6 +343,14 @@ export default function ObjectivesPage() {
       setGoalsLoading(false);
     }
   };
+
+  // Atualizar semana atual quando a data mudar
+  useEffect(() => {
+    if (isNewDay && plans.length > 0) {
+      console.log('📅 Data mudou, recalculando semana atual...');
+      loadPlansAndWeeks();
+    }
+  }, [isNewDay, currentDate]);
 
   const loadGoalsForWeek = async (weekNumber: number) => {
     console.log(`🔄 loadGoalsForWeek: Carregando semana ${weekNumber}...`);
