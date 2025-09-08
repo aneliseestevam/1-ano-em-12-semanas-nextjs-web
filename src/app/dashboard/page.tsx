@@ -440,9 +440,42 @@ export default function Dashboard() {
             const currentWeek = Math.min(Math.max(weeksSinceStart + 1, 1), totalWeeks);
 
             // Calcular semanas concluídas
-            const completedWeeks = activePlan.weeks?.filter(week => 
-              week.goals && week.goals.length > 0 && week.goals.every(goal => goal.completed)
-            ).length || 0;
+            const completedWeeks = activePlan.weeks?.filter(week => {
+              const hasGoals = week.goals && week.goals.length > 0;
+              const allGoalsCompleted = hasGoals && week.goals.every(goal => goal.completed);
+              
+              // Verificar se a semana já passou (baseado na data de fim)
+              const weekEndDate = new Date(week.endDate);
+              const isWeekPast = weekEndDate < now;
+              
+              // Uma semana é considerada concluída se:
+              // 1. Tem objetivos e todos estão completos, OU
+              // 2. A semana já passou (independente dos objetivos)
+              const isCompleted = (hasGoals && allGoalsCompleted) || isWeekPast;
+              
+              console.log(`📅 Semana ${week.weekNumber}:`, {
+                hasGoals,
+                goalsCount: week.goals?.length || 0,
+                allGoalsCompleted,
+                weekEndDate: weekEndDate.toDateString(),
+                isWeekPast,
+                isCompleted,
+                goals: week.goals?.map(g => ({ id: g.id, title: g.title, completed: g.completed })) || []
+              });
+              
+              return isCompleted;
+            }).length || 0;
+            
+            console.log('📊 Dashboard - Cálculo de semanas concluídas:', {
+              totalWeeks: activePlan.weeks?.length || 0,
+              completedWeeks,
+              weeksData: activePlan.weeks?.map(w => ({
+                weekNumber: w.weekNumber,
+                hasGoals: !!(w.goals && w.goals.length > 0),
+                goalsCount: w.goals?.length || 0,
+                allCompleted: w.goals && w.goals.length > 0 ? w.goals.every(g => g.completed) : false
+              })) || []
+            });
 
             return (
               <div className="bg-gradient-to-br from-blue-50 to-indigo-100 rounded-xl shadow-sm border border-blue-200 p-8 mb-8">
